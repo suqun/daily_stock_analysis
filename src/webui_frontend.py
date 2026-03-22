@@ -15,9 +15,11 @@ from datetime import datetime
 # 导入涨停分组数据获取函数
 try:
     from src.storage import get_group_stocks, get_self_select_stocks
+    from src.analyzer import get_stock_name_multi_source
 except ImportError:
     get_group_stocks = None
     get_self_select_stocks = None
+    get_stock_name_multi_source = None
 
 logger = logging.getLogger(__name__)
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
@@ -96,6 +98,20 @@ def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path
         logger.error("前端命令执行失败: %s", " ".join(exc.cmd))
         return False
 
+def _convert_stock_code_to_info(stock_code: str) -> dict:
+    """将股票代码转换为包含code和name的对象"""
+    if not stock_code:
+        return {"code": "", "name": ""}
+    try:
+        if get_stock_name_multi_source:
+            name = get_stock_name_multi_source(stock_code)
+            if name and not name.startswith('股票'):
+                return {"code": stock_code, "name": name}
+    except Exception:
+        pass
+    return {"code": stock_code, "name": stock_code}
+
+
 # 修复：涨停分组数据同步，路径和页面fetch完全一致
 def sync_limit_group_static_data() -> bool:
     if get_group_stocks is None or get_self_select_stocks is None:
@@ -107,10 +123,15 @@ def sync_limit_group_static_data() -> bool:
         static_data_dir.mkdir(parents=True, exist_ok=True)
         data_file_path = static_data_dir / "limit_group_data.json"
 
-        # 获取盘后分组数据
-        first_limit_group = get_group_stocks("首板涨停组") or []
-        second_limit_group = get_group_stocks("两板涨停组") or []
-        self_select_stocks = get_self_select_stocks() or []
+        # 获取盘后分组数据（股票代码列表）
+        first_codes = get_group_stocks("首板涨停组") or []
+        second_codes = get_group_stocks("两板涨停组") or []
+        self_select_codes = get_self_select_stocks() or []
+
+        # 转换为包含code和name的对象列表
+        first_limit_group = [_convert_stock_code_to_info(code) for code in first_codes]
+        second_limit_group = [_convert_stock_code_to_info(code) for code in second_codes]
+        self_select_stocks = [_convert_stock_code_to_info(code) for code in self_select_codes]
 
         # 组装数据，和前端类型完全匹配
         sync_data = {

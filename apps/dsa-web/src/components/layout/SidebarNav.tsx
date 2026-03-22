@@ -78,7 +78,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                   />
                 )}
                 <Icon className={cn('ml-1 h-5 w-5 shrink-0', isActive ? 'text-[var(--nav-icon-active)]' : 'text-current')} />
-                {!collapsed ? <span className="truncate">{label}</span> : null}
+                {!collapsed ? <span className="truncate text-xs">{label}</span> : null}
                 {badge === 'completion' && completionBadge ? (
                   <span
                     data-testid="chat-completion-badge"

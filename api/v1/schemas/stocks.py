@@ -109,3 +109,18 @@ class StockHistoryResponse(BaseModel):
                 "data": []
             }
         }
+
+
+class LimitGroupStockItem(BaseModel):
+    """涨停分组个股"""
+    code: str = Field(..., description="股票代码")
+    name: str = Field(..., description="股票名称")
+
+
+class LimitGroupData(BaseModel):
+    """涨停分组数据响应"""
+    update_time: str = Field(..., description="更新时间")
+    update_date: str = Field(..., description="更新日期")
+    first_limit_group: List[LimitGroupStockItem] = Field(default_factory=list, description="首板涨停组")
+    second_limit_group: List[LimitGroupStockItem] = Field(default_factory=list, description="二板涨停组")
+    self_select_stocks: List[LimitGroupStockItem] = Field(default_factory=list, description="精选自选股")

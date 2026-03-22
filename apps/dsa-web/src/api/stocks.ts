@@ -12,6 +12,19 @@ export type ExtractFromImageResponse = {
   rawText?: string;
 };
 
+export type LimitGroupStockItem = {
+  code: string;
+  name: string;
+};
+
+export type LimitGroupData = {
+  update_time: string;
+  update_date: string;
+  first_limit_group: LimitGroupStockItem[];
+  second_limit_group: LimitGroupStockItem[];
+  self_select_stocks: LimitGroupStockItem[];
+};
+
 export const stocksApi = {
   async extractFromImage(file: File): Promise<ExtractFromImageResponse> {
     const formData = new FormData();
@@ -23,7 +36,7 @@ export const stocksApi = {
       formData,
       {
         headers,
-        timeout: 60000, // Vision API can be slow; 60s
+        timeout: 60000,
       },
     );
 
@@ -50,5 +63,10 @@ export const stocksApi = {
       return { codes: data.codes ?? [], items: data.items };
     }
     throw new Error('请提供文件或粘贴文本');
+  },
+
+  async getLimitGroups(): Promise<LimitGroupData> {
+    const response = await apiClient.get('/api/v1/stocks/limit-groups');
+    return response.data as LimitGroupData;
   },
 };

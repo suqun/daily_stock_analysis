@@ -22,6 +22,8 @@ from api.v1.schemas.stocks import (
     KLineData,
     StockHistoryResponse,
     StockQuote,
+    LimitGroupData,
+    LimitGroupStockItem,
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.image_stock_extractor import (
@@ -385,5 +387,57 @@ def get_stock_history(
             detail={
                 "error": "internal_error",
                 "message": f"获取历史行情失败: {str(e)}"
+            }
+        )
+
+
+@router.get(
+    "/limit-groups",
+    response_model=LimitGroupData,
+    responses={
+        200: {"description": "涨停分组数据"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取涨停分组数据",
+    description="从数据库获取涨停分组、自选股数据，包含股票代码和名称",
+)
+def get_limit_groups() -> LimitGroupData:
+    """获取涨停分组数据"""
+    from datetime import datetime
+    from src.storage import get_group_stocks, get_self_select_stocks
+    from src.analyzer import get_stock_name_multi_source
+
+    try:
+        first_codes = get_group_stocks("首板涨停组") or []
+        second_codes = get_group_stocks("两板涨停组") or []
+        self_select_codes = get_self_select_stocks() or []
+
+        def codes_to_items(codes):
+            items = []
+            for code in codes:
+                try:
+                    name = get_stock_name_multi_source(code) if code else ""
+                    if name and not name.startswith("股票"):
+                        items.append(LimitGroupStockItem(code=code, name=name))
+                    else:
+                        items.append(LimitGroupStockItem(code=code, name=code))
+                except Exception:
+                    items.append(LimitGroupStockItem(code=code, name=code))
+            return items
+
+        return LimitGroupData(
+            update_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            update_date=datetime.now().strftime("%Y-%m-%d"),
+            first_limit_group=codes_to_items(first_codes),
+            second_limit_group=codes_to_items(second_codes),
+            self_select_stocks=codes_to_items(self_select_codes),
+        )
+    except Exception as e:
+        logger.error(f"获取涨停分组数据失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"获取涨停分组数据失败: {str(e)}"
             }
         )
