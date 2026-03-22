@@ -1997,3 +1997,196 @@ if __name__ == "__main__":
     # 测试获取上下文
     context = db.get_analysis_context('600519')
     print(f"分析上下文: {context}")
+
+
+
+
+
+
+
+
+# ==================== 自选股与分组管理 - 扩展方法（最终修复版）====================
+import json
+from typing import List
+import logging
+
+# 复用已有的logger，避免重复创建
+logger = logging.getLogger(__name__)
+
+def _ensure_sys_config_table(session):
+    """
+    统一前置函数：确保sys_config表存在（独立事务，避免被rollback）
+    解决核心问题：建表操作不被session_scope的异常回滚影响
+    """
+    from sqlalchemy import text
+    try:
+        # 先尝试查询，检查表是否存在
+        session.execute(text("SELECT 1 FROM sys_config LIMIT 1"))
+    except Exception as e:
+        # 表不存在，执行创建（使用独立的事务提交）
+        try:
+            # 临时关闭当前session的autocommit=False，确保建表生效
+            session.connection().execute(text("""
+                CREATE TABLE IF NOT EXISTS sys_config (
+                    key VARCHAR(50) PRIMARY KEY,
+                    value TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            # 手动提交建表操作，避免被外层事务回滚
+            session.connection().commit()
+            logger.info("✅ 自动创建 sys_config 表成功")
+        except Exception as ce:
+            logger.error(f"❌ 创建 sys_config 表失败: {str(ce)}")
+            raise
+
+# ------------------- 自选股相关方法 -------------------
+def get_self_select_stocks() -> List[str]:
+    """
+    获取自选股列表，基于原有数据库会话，读取自选股配置
+    兼容原有导入，无参数，返回股票代码列表
+    """
+    db = get_db()
+    with db.session_scope() as session:
+        from sqlalchemy import text
+        try:
+            # 前置检查：确保表存在
+            _ensure_sys_config_table(session)
+            result = session.execute(text("SELECT value FROM sys_config WHERE key = 'self_select_stocks'")).scalar()
+            if result:
+                return json.loads(result)
+            return []
+        except Exception as e:
+            logger.warning(f"读取自选股失败: {str(e)}")
+            return []
+
+def add_stock_to_self_select(stock_code: str):
+    """
+    添加个股到自选股，去重避免重复添加，存入数据库持久化
+    """
+    if not stock_code:
+        logger.warning("股票代码为空，跳过添加")
+        return
+
+    db = get_db()
+    stocks = get_self_select_stocks()
+    if stock_code not in stocks:
+        stocks.append(stock_code)
+        with db.session_scope() as session:
+            from sqlalchemy import text
+            try:
+                # 前置检查：确保表存在
+                _ensure_sys_config_table(session)
+                session.execute(
+                    text("REPLACE INTO sys_config (key, value) VALUES (:key, :value)"),
+                    {"key": "self_select_stocks", "value": json.dumps(stocks, ensure_ascii=False)}
+                )
+                logger.debug(f"添加自选股成功: {stock_code}")
+            except Exception as e:
+                logger.error(f"添加自选股失败 {stock_code}: {str(e)}")
+                raise
+
+def remove_stock_from_self_select(stock_code: str):
+    """
+    从自选股移除个股，同步更新数据库
+    """
+    if not stock_code:
+        logger.warning("股票代码为空，跳过移除")
+        return
+
+    db = get_db()
+    stocks = get_self_select_stocks()
+    if stock_code in stocks:
+        stocks.remove(stock_code)
+        with db.session_scope() as session:
+            from sqlalchemy import text
+            try:
+                # 前置检查：确保表存在
+                _ensure_sys_config_table(session)
+                session.execute(
+                    text("REPLACE INTO sys_config (key, value) VALUES (:key, :value)"),
+                    {"key": "self_select_stocks", "value": json.dumps(stocks, ensure_ascii=False)}
+                )
+                logger.debug(f"移除自选股成功: {stock_code}")
+            except Exception as e:
+                logger.error(f"移除自选股失败 {stock_code}: {str(e)}")
+                raise
+
+# ------------------- 动态分组相关方法 -------------------
+def get_group_stocks(group_name: str) -> List[str]:
+    """
+    获取指定分组的个股列表，基于数据库存储，支持多分组管理
+    """
+    if not group_name:
+        logger.warning("分组名称为空，返回空列表")
+        return []
+
+    db = get_db()
+    with db.session_scope() as session:
+        from sqlalchemy import text
+        try:
+            # 前置检查：确保表存在
+            _ensure_sys_config_table(session)
+            result = session.execute(
+                text("SELECT value FROM sys_config WHERE key = :group_key"),
+                {"group_key": f"group_{group_name}"}
+            ).scalar()
+            if result:
+                return json.loads(result)
+            return []
+        except Exception as e:
+            logger.warning(f"读取分组 {group_name} 失败: {str(e)}")
+            return []
+
+def add_stock_to_group(stock_code: str, group_name: str):
+    """
+    添加个股到指定动态分组，去重处理，存入数据库
+    """
+    if not stock_code or not group_name:
+        logger.warning("股票代码/分组名称为空，跳过添加")
+        return
+
+    db = get_db()
+    group_stocks = get_group_stocks(group_name)
+    if stock_code not in group_stocks:
+        group_stocks.append(stock_code)
+        with db.session_scope() as session:
+            from sqlalchemy import text
+            try:
+                # 前置检查：确保表存在（核心修复点）
+                _ensure_sys_config_table(session)
+                session.execute(
+                    text("REPLACE INTO sys_config (key, value) VALUES (:key, :value)"),
+                    {"key": f"group_{group_name}", "value": json.dumps(group_stocks, ensure_ascii=False)}
+                )
+                logger.debug(f"添加 {stock_code} 到分组 {group_name} 成功")
+            except Exception as e:
+                logger.error(f"添加 {stock_code} 到分组 {group_name} 失败: {str(e)}")
+                raise
+
+def remove_stock_from_group(stock_code: str, group_name: str):
+    """
+    从指定分组移除个股，同步更新数据库
+    """
+    if not stock_code or not group_name:
+        logger.warning("股票代码/分组名称为空，跳过移除")
+        return
+
+    db = get_db()
+    group_stocks = get_group_stocks(group_name)
+    if stock_code in group_stocks:
+        group_stocks.remove(stock_code)
+        with db.session_scope() as session:
+            from sqlalchemy import text
+            try:
+                # 前置检查：确保表存在
+                _ensure_sys_config_table(session)
+                session.execute(
+                    text("REPLACE INTO sys_config (key, value) VALUES (:key, :value)"),
+                    {"key": f"group_{group_name}", "value": json.dumps(group_stocks, ensure_ascii=False)}
+                )
+                logger.debug(f"从分组 {group_name} 移除 {stock_code} 成功")
+            except Exception as e:
+                logger.error(f"从分组 {group_name} 移除 {stock_code} 失败: {str(e)}")
+                raise
+# ==================================================================================

@@ -10,6 +10,8 @@ A股自选股智能分析系统 - AI分析层
 3. 解析 LLM 响应为结构化 AnalysisResult
 """
 
+import pandas as pd
+import numpy as np
 import json
 import logging
 import math
@@ -1731,3 +1733,68 @@ if __name__ == "__main__":
         print(f"分析结果: {result.to_dict()}")
     else:
         print("Gemini API 未配置，跳过测试")
+
+
+# ==================== 涨停策略双买点判定（修复版）====================
+def check_limit_up_buy_signal(stock_code: str, df: pd.DataFrame):
+    """
+    基础买点：地量 + 下影线
+    核心买点：不跌破10日线 + 放量突破5日线
+    修复：
+    1. 字段名适配akshare（中文列名）
+    2. 添加容错处理
+    3. 通知函数缺失时不报错
+    """
+    # 容错：通知函数缺失时不报错
+    try:
+        from src.notification import send_single_notification
+    except ImportError:
+        send_single_notification = None
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("通知模块未找到，买点触发时不会发送通知")
+
+    if len(df) < 10:
+        return False
+
+    # 字段名适配：优先用中文列名（akshare返回），兜底用英文
+    def get_col(df, cn_name, en_name):
+        if cn_name in df.columns:
+            return df[cn_name]
+        elif en_name in df.columns:
+            return df[en_name]
+        else:
+            return pd.Series([0]*len(df), index=df.index)
+
+    # 均线计算（适配字段名）
+    close = get_col(df, "收盘", "close")
+    volume = get_col(df, "成交量", "volume")
+    open_ = get_col(df, "开盘", "open")
+    low = get_col(df, "最低", "low")
+
+    df["ma5"] = close.rolling(5).mean()
+    df["ma10"] = close.rolling(10).mean()
+    df["ma5_vol"] = volume.rolling(5).mean()
+
+    current = df.iloc[-1]
+    # 地量：成交量＜5日均量60%
+    is_low_volume = volume.iloc[-1] < df["ma5_vol"].iloc[-1] * 0.6
+    # 下影线：最低价明显低于开盘，收盘价收回
+    has_lower_shadow = low.iloc[-1] < open_.iloc[-1] * 0.995 and close.iloc[-1] > low.iloc[-1] * 1.01
+
+    # 基础买点
+    basic_buy = is_low_volume and has_lower_shadow
+    # 核心买点：不跌破10日线 + 放量突破5日线
+    hold_ma10 = close.iloc[-5:].min() > df["ma10"].iloc[-1]
+    break_ma5 = close.iloc[-1] > df["ma5"].iloc[-1] and volume.iloc[-1] > df["ma5_vol"].iloc[-1] * 1.2
+    core_buy = hold_ma10 and break_ma5
+
+    # 触发通知（容错）
+    if send_single_notification:
+        if basic_buy:
+            send_single_notification(stock_code, title="涨停低吸-基础买点", content=f"地量+下影线，现价：{close.iloc[-1]:.2f}")
+        if core_buy:
+            send_single_notification(stock_code, title="涨停低吸-核心买点", content=f"10日线支撑+突破5日线，现价：{close.iloc[-1]:.2f}", urgent=True)
+
+    return basic_buy or core_buy
+# ================================================================

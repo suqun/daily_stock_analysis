@@ -1,4 +1,48 @@
 # -*- coding: utf-8 -*-
+
+import os
+import sys
+
+# ==================== 暴力调试：先定位问题 ====================
+print("=== 环境变量读取调试 ===")
+# 1. 打印当前工作目录（脚本执行的目录）
+cwd = os.getcwd()
+print(f"当前工作目录: {cwd}")
+
+# 2. 检查 .env 文件是否存在
+env_path = os.path.join(cwd, ".env")
+print(f".env 文件路径: {env_path}")
+print(f".env 文件是否存在: {os.path.exists(env_path)}")
+
+# 3. 尝试手动读取 .env 文件内容（看是否能读到）
+if os.path.exists(env_path):
+    with open(env_path, 'r', encoding='utf-8') as f:
+        env_content = f.read()
+        print(f".env 文件内容（前500字符）:\n{env_content[:500]}")
+else:
+    print("❌ .env 文件不存在！请确认文件位置")
+
+# 4. 强制安装/导入 python-dotenv 并加载
+try:
+    from dotenv import load_dotenv
+    # 强制加载指定路径的 .env 文件（避免路径问题）
+    load_dotenv(dotenv_path=env_path, override=True)
+    print("✅ python-dotenv 加载成功")
+except ImportError:
+    print("⚠ 安装 python-dotenv...")
+    os.system(f"{sys.executable} -m pip install python-dotenv")
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=env_path, override=True)
+
+# 5. 打印关键环境变量（看是否加载成功）
+print("\n=== 关键环境变量读取结果 ===")
+print(f"TUSHARE_TOKEN: {os.getenv('TUSHARE_TOKEN')[:8]+'...' if os.getenv('TUSHARE_TOKEN') else 'None'}")
+print(f"GEMINI_API_KEY: {os.getenv('GEMINI_API_KEY')[:8]+'...' if os.getenv('GEMINI_API_KEY') else 'None'}")
+print(f"DEEPSEEK_API_KEY: {os.getenv('DEEPSEEK_API_KEY')[:8]+'...' if os.getenv('DEEPSEEK_API_KEY') else 'None'}")
+# =============================================================
+
+
+
 """
 ===================================
 A股自选股智能分析系统 - 环境验证测试
