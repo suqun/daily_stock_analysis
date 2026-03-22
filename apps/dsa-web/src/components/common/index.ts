@@ -19,6 +19,7 @@ export * from './ApiErrorAlert';
 export * from './Collapsible';
 export * from './ScoreGauge';
 export * from './JsonViewer';
+export * from './YamlViewer';
 export * from './Select';
 export * from './Badge';
 export * from './Pagination';
