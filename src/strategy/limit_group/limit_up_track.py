@@ -79,7 +79,12 @@ try:
         get_self_select_stocks,
         get_db,
         add_stock_to_group,
-        add_stock_to_self_select
+        add_stock_to_self_select,
+    )
+    from .storage import (
+        add_limit_group_stock,
+        get_all_active_limit_group_stocks,
+        update_limit_group_stock_observe_days,
     )
     logger.info("✅ storage模块导入成功")
 except ImportError as e:
@@ -268,11 +273,14 @@ def check_limit_up(stock_code: str, stock_name: str = "", daily_df: pd.DataFrame
     return is_limit_up
 
 def add_stock_to_limit_up_group(stock_code: str, stock_name: str, board_type: str = "首板"):
+    """添加涨停股到分组（使用详细记录模型）"""
     try:
         group_name = f"{board_type}涨停组"
-        add_stock_to_group(stock_code, group_name)
+        # 使用详细记录模型（记录插入时间、观察天数等）
+        add_limit_group_stock(stock_code, stock_name, group_name)
+        # 同时添加到自选股列表
         add_stock_to_self_select(stock_code)
-        logger.info(f"✅ {stock_code}({stock_name}) 已加入【{group_name}】和自选股")
+        logger.info(f"✅ {stock_code}({stock_name}) 已加入【{group_name}】（详细记录）并添加到自选股")
     except Exception as e:
         logger.error(f"❌ {stock_code} 分组添加失败：{str(e)[:80]}")
         raise
@@ -361,43 +369,67 @@ def _compatibility_mode_execution() -> bool:
     logger.info("🔧 兼容模式：开始执行硬编码策略逻辑")
 
     try:
-        # 1. 读取已入组的标的池
-        first_board_stocks = get_group_stocks("首板涨停组") or []
-        second_board_stocks = get_group_stocks("两板涨停组") or []
-        target_stocks = list(set(first_board_stocks + second_board_stocks))
+        # 1. 读取已入组的标的池（使用详细记录模型）
+        all_active_stocks = get_all_active_limit_group_stocks()
+        
+        # 按分组分类
+        first_board_stocks = [s for s in all_active_stocks if s["group_name"] == "首板涨停组" and s["status"] == "active"]
+        second_board_stocks = [s for s in all_active_stocks if s["group_name"] == "两板涨停组" and s["status"] == "active"]
+        target_stocks = first_board_stocks + second_board_stocks
 
         if not target_stocks:
             logger.warning("⚠️  标的池为空，无涨停股可检查，任务结束")
             return True
 
-        logger.info(f"📊 标的池加载完成：首板{len(first_board_stocks)}只 | 二板{len(second_board_stocks)}只 | 去重后共{len(target_stocks)}只")
+        logger.info(f"📊 标的池加载完成：首板{len(first_board_stocks)}只 | 二板{len(second_board_stocks)}只 | 共{len(target_stocks)}只")
 
-        # 2. 遍历标的执行简单检查（兼容模式下的简化策略）
+        # 2. 遍历标的执行检查并更新观察天数
         check_count = 0
-        for stock_code in target_stocks:
+        for stock in target_stocks:
             try:
-                stock_name = get_stock_name(stock_code)
+                stock_code = stock["stock_code"]
+                stock_name = stock["stock_name"] or get_stock_name(stock_code)
                 logger.debug(f"检查股票：{stock_code} {stock_name}")
+                
+                # 更新观察天数
+                new_observe_days = (stock["observe_days"] or 0) + 1
+                update_limit_group_stock_observe_days(stock_code, stock["group_name"], new_observe_days)
+                
+                # 获取数据用于策略检查
                 df = get_daily_history(stock_code, days=5)
                 if not df.empty:
                     check_count += 1
+                    
+                    # 简单策略判定：连续3天观察且符合条件则标记为精选
+                    if new_observe_days >= 3 and len(df) >= 3:
+                        # 这里可以添加更复杂的策略判定逻辑
+                        # 简化：观察3天以上且涨幅为正
+                        recent_pct = df.iloc[-1].get('pct_chg', 0) or 0
+                        if recent_pct > 0:
+                            try:
+                                from src.storage import mark_stock_as_selected
+                                reason = f"观察{new_observe_days}天，涨幅{recent_pct:.2f}%，符合涨停低吸策略"
+                                mark_stock_as_selected(stock_code, stock["group_name"], reason)
+                                logger.info(f"⭐ 标记 {stock_code} 为精选自选: {reason}")
+                            except Exception as select_e:
+                                logger.warning(f"标记精选失败: {select_e}")
+                                
             except Exception as e:
-                logger.warning(f"检查 {stock_code} 失败：{str(e)[:60]}")
+                logger.warning(f"检查 {stock['stock_code']} 失败：{str(e)[:60]}")
 
-        logger.info(f"✅ 兼容模式策略检查完成，共检查 {check_count} 只股票")
+        logger.info(f"✅ 兼容模式策略检查完成，共检查 {check_count} 只股票并更新观察天数")
 
-        # 3. 生成模拟信号（兼容模式下的简化处理）
-        mock_signals = []
+        # 3. 信号持久化（保留原有逻辑）
         if target_stocks:
-            mock_signals.append({
-                "stock_code": target_stocks[0],
-                "stock_name": get_stock_name(target_stocks[0]),
+            mock_signals = [{
+                "stock_code": target_stocks[0]["stock_code"],
+                "stock_name": target_stocks[0]["stock_name"] or target_stocks[0]["stock_code"],
                 "signal_type": "继续观察",
                 "signal_priority": "低",
                 "trigger_date": datetime.now().strftime("%Y-%m-%d"),
                 "sentiment_score": 0,
-                "pattern_analysis": "首板涨停标的"
-            })
+                "pattern_analysis": f"首板涨停标的，观察{target_stocks[0]['observe_days'] or 0}天"
+            }]
 
         # 4. 信号持久化
         if mock_signals:

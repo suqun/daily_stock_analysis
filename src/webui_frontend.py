@@ -12,14 +12,16 @@ from pathlib import Path
 from typing import Iterable, Sequence
 from datetime import datetime
 
-# 导入涨停分组数据获取函数
 try:
-    from src.storage import get_group_stocks, get_self_select_stocks
-    from src.analyzer import get_stock_name_multi_source
+    from src.storage import get_self_select_stocks
+    from src.strategy.limit_group import (
+        get_limit_group_stocks_by_group,
+        get_selected_stocks_with_details,
+    )
 except ImportError:
-    get_group_stocks = None
     get_self_select_stocks = None
-    get_stock_name_multi_source = None
+    get_limit_group_stocks_by_group = None
+    get_selected_stocks_with_details = None
 
 logger = logging.getLogger(__name__)
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
@@ -98,49 +100,29 @@ def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path
         logger.error("前端命令执行失败: %s", " ".join(exc.cmd))
         return False
 
-def _convert_stock_code_to_info(stock_code: str) -> dict:
-    """将股票代码转换为包含code和name的对象"""
-    if not stock_code:
-        return {"code": "", "name": ""}
-    try:
-        if get_stock_name_multi_source:
-            name = get_stock_name_multi_source(stock_code)
-            if name and not name.startswith('股票'):
-                return {"code": stock_code, "name": name}
-    except Exception:
-        pass
-    return {"code": stock_code, "name": stock_code}
 
-
-# 修复：涨停分组数据同步，路径和页面fetch完全一致
 def sync_limit_group_static_data() -> bool:
-    if get_group_stocks is None or get_self_select_stocks is None:
+    if get_limit_group_stocks_by_group is None or get_selected_stocks_with_details is None:
         logger.debug("涨停分组数据模块未初始化，跳过数据同步")
         return False
     try:
-        # 修复：数据路径和页面fetch的/strategy/limit_group_data.json完全一致
         static_data_dir = Path(__file__).resolve().parent.parent / "static" / "strategy"
         static_data_dir.mkdir(parents=True, exist_ok=True)
         data_file_path = static_data_dir / "limit_group_data.json"
 
-        # 获取盘后分组数据（股票代码列表）
-        first_codes = get_group_stocks("首板涨停组") or []
-        second_codes = get_group_stocks("两板涨停组") or []
-        self_select_codes = get_self_select_stocks() or []
+        # 从新表直接读取
+        first = get_limit_group_stocks_by_group("首板涨停组")
+        second = get_limit_group_stocks_by_group("两板涨停组")
+        selected = get_selected_stocks_with_details()
 
-        # 转换为包含code和name的对象列表
-        first_limit_group = [_convert_stock_code_to_info(code) for code in first_codes]
-        second_limit_group = [_convert_stock_code_to_info(code) for code in second_codes]
-        self_select_stocks = [_convert_stock_code_to_info(code) for code in self_select_codes]
-
-        # 组装数据，和前端类型完全匹配
+        # 组装数据
         sync_data = {
             "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "update_date": datetime.now().strftime("%Y-%m-%d"),
-            "first_limit_group": first_limit_group,
-            "second_limit_group": second_limit_group,
-            "self_select_stocks": self_select_stocks,
-            "source": "盘后统一入组数据"
+            "first_limit_group": [{"code": s["stock_code"], "name": s["stock_name"] or s["stock_code"]} for s in first],
+            "second_limit_group": [{"code": s["stock_code"], "name": s["stock_name"] or s["stock_code"]} for s in second],
+            "self_select_stocks": [{"code": s["stock_code"], "name": s["stock_name"] or s["stock_code"]} for s in selected],
+            "source": "limit_group_stocks表"
         }
 
         # 写入文件

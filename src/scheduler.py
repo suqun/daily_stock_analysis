@@ -168,29 +168,20 @@ def run_with_schedule(
     scheduler.run()
 
 
-# ==================== 涨停策略任务注册（仅保留导入和注册）====================
-def register_daily_task(task: Callable, run_after_market: bool = True):
+# 涨停策略任务：已改为手动触发，详见 API /api/v1/stocks/limit-groups/trigger
+# 如需定时执行，可通过 /api/v1/stocks/limit-groups/schedule 接口配置
+# 手动触发函数保留供 API 层调用
+def trigger_limit_up_strategy():
     """
-    注册每日盘后任务
+    手动触发涨停低吸策略检查
     """
-    schedule_time = "18:00" if run_after_market else "09:00"
-    logger.info(f"注册盘后任务，执行时间：{schedule_time}")
-
-    def _run_scheduler():
-        run_with_schedule(task, schedule_time=schedule_time, run_immediately=False)
-
-    scheduler_thread = threading.Thread(target=_run_scheduler, daemon=True)
-    scheduler_thread.start()
-    logger.info("涨停策略盘后任务调度器已启动")
-
-
-# 自动注册涨停策略任务（修正导入路径）
-try:
-    from src.strategy.limit_up_track import daily_limit_up_strategy_check
-    register_daily_task(daily_limit_up_strategy_check, run_after_market=True)
-    logger.info("✅ 涨停策略任务注册成功")
-except ImportError as e:
-    logger.warning(f"导入涨停策略模块失败：{e}，请检查 src/strategy/limit_up_track.py 是否存在")
+    try:
+        from src.strategy.limit_group.limit_up_track import daily_limit_up_strategy_check
+        daily_limit_up_strategy_check()
+        return True
+    except ImportError as e:
+        logger.error(f"涨停策略模块导入失败：{e}")
+        return False
 
 if __name__ == "__main__":
     # 测试定时调度

@@ -399,38 +399,42 @@ def get_stock_history(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取涨停分组数据",
-    description="从数据库获取涨停分组、自选股数据，包含股票代码和名称",
+    description="从数据库获取涨停分组、自选股数据，包含股票代码、名称、插入时间、观察天数、精选状态等详情",
 )
 def get_limit_groups() -> LimitGroupData:
-    """获取涨停分组数据"""
+    """获取涨停分组数据（包含详细信息）"""
     from datetime import datetime
-    from src.storage import get_group_stocks, get_self_select_stocks
+    from src.strategy.limit_group import get_limit_group_stocks_by_group, get_selected_stocks_with_details
     from src.analyzer import get_stock_name_multi_source
 
     try:
-        first_codes = get_group_stocks("首板涨停组") or []
-        second_codes = get_group_stocks("两板涨停组") or []
-        self_select_codes = get_self_select_stocks() or []
+        # 获取首板涨停组详情
+        first_board_stocks = get_limit_group_stocks_by_group("首板涨停组")
+        # 获取二板涨停组详情
+        second_board_stocks = get_limit_group_stocks_by_group("两板涨停组")
+        # 获取精选自选股详情
+        selected_stocks = get_selected_stocks_with_details()
 
-        def codes_to_items(codes):
-            items = []
-            for code in codes:
-                try:
-                    name = get_stock_name_multi_source(code) if code else ""
-                    if name and not name.startswith("股票"):
-                        items.append(LimitGroupStockItem(code=code, name=name))
-                    else:
-                        items.append(LimitGroupStockItem(code=code, name=code))
-                except Exception:
-                    items.append(LimitGroupStockItem(code=code, name=code))
-            return items
+        def stock_to_item(stock: dict) -> LimitGroupStockItem:
+            """将存储层返回的 dict 转换为 API 响应项"""
+            def _fmt_time(v):
+                return v.strftime("%Y-%m-%d %H:%M:%S") if v else None
+            return LimitGroupStockItem(
+                code=stock.get("stock_code", ""),
+                name=stock.get("stock_name") or stock.get("stock_code", ""),
+                insert_time=_fmt_time(stock.get("insert_time")),
+                observe_days=stock.get("observe_days"),
+                is_selected=stock.get("is_selected"),
+                selected_time=_fmt_time(stock.get("selected_time")),
+                selected_reason=stock.get("selected_reason"),
+            )
 
         return LimitGroupData(
             update_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             update_date=datetime.now().strftime("%Y-%m-%d"),
-            first_limit_group=codes_to_items(first_codes),
-            second_limit_group=codes_to_items(second_codes),
-            self_select_stocks=codes_to_items(self_select_codes),
+            first_limit_group=[stock_to_item(s) for s in first_board_stocks],
+            second_limit_group=[stock_to_item(s) for s in second_board_stocks],
+            self_select_stocks=[stock_to_item(s) for s in selected_stocks],
         )
     except Exception as e:
         logger.error(f"获取涨停分组数据失败: {e}", exc_info=True)
@@ -440,4 +444,32 @@ def get_limit_groups() -> LimitGroupData:
                 "error": "internal_error",
                 "message": f"获取涨停分组数据失败: {str(e)}"
             }
+        )
+
+
+@router.post(
+    "/limit-groups/trigger",
+    response_model=dict,
+    tags=["stocks"],
+    summary="手动触发涨停低吸策略检查",
+    description="手动触发涨停低吸策略检查任务，包括：1. 迁移旧表数据到新表 2. 更新观察天数 3. 策略判定并标记精选",
+)
+def trigger_limit_up_strategy():
+    """手动触发涨停低吸策略检查"""
+    try:
+        from src.strategy.limit_group import trigger_limit_up_strategy as do_trigger
+
+        import threading
+        thread = threading.Thread(target=do_trigger, daemon=True)
+        thread.start()
+
+        return {
+            "success": True,
+            "message": "涨停低吸策略任务已触发",
+        }
+    except Exception as e:
+        logger.error(f"触发涨停策略失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "internal_error", "message": f"触发失败: {str(e)}"}
         )

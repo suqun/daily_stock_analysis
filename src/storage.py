@@ -620,6 +620,28 @@ class LLMUsage(Base):
     called_at = Column(DateTime, default=datetime.now, index=True)
 
 
+class LimitGroupStock(Base):
+    __tablename__ = 'limit_group_stocks'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stock_code = Column(String(20), nullable=False, index=True)
+    stock_name = Column(String(50))
+    group_name = Column(String(50), nullable=False, index=True)
+    insert_time = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    observe_days = Column(Integer, nullable=False, default=0)
+    is_selected = Column(Boolean, nullable=False, default=False, index=True)
+    selected_time = Column(DateTime, nullable=True)
+    selected_reason = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default='active', index=True)
+    last_check_time = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    __table_args__ = (
+        UniqueConstraint('stock_code', 'group_name', name='uix_limit_group_stock_code_group'),
+        Index('ix_limit_group_stock_group', 'group_name'),
+        Index('ix_limit_group_stock_selected', 'is_selected'),
+    )
+
+
 class DatabaseManager:
     """
     数据库管理器 - 单例模式
@@ -2189,4 +2211,5 @@ def remove_stock_from_group(stock_code: str, group_name: str):
             except Exception as e:
                 logger.error(f"从分组 {group_name} 移除 {stock_code} 失败: {str(e)}")
                 raise
-# ==================================================================================
+
+

@@ -15,10 +15,57 @@ const renderStockList = (list: LimitGroupStockItem[], emptyTip: string) => {
       {list.map((item) => (
         <div
           key={item.code}
-          className="group flex justify-between items-center py-2.5 px-3 rounded-lg hover:bg-gradient-to-r from-cyan/10 to-blue-500/10 transition-all duration-200 cursor-pointer border border-transparent hover:border-cyan/20"
+          className="group flex flex-col py-2.5 px-3 rounded-lg hover:bg-gradient-to-r from-cyan/10 to-blue-500/10 transition-all duration-200 cursor-pointer border border-transparent hover:border-cyan/20"
         >
-          <span className="text-sm font-mono font-medium text-cyan">{item.code}</span>
-          <span className="text-sm font-medium text-gray-800 group-hover:text-blue-600 transition-colors">{item.name}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-mono font-medium text-cyan">{item.code}</span>
+            <a
+              href={`https://xueqiu.com/S/${(item.code.split('.')[1] || '') + (item.code.split('.')[0] || '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-gray-800 group-hover:text-blue-600 transition-colors hover:underline"
+            >
+              {item.name}
+            </a>
+          </div>
+          {/* 详细信息行 */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            {/* 插入时间 */}
+            <span className="inline-flex items-center gap-1 text-gray-500">
+              <span className="text-gray-400">📅</span>
+              插入:
+              <span className="font-medium text-gray-600">{item.insert_time ? item.insert_time.split(' ')[0] : '-'}</span>
+            </span>
+            {/* 观察天数 */}
+            <span className="inline-flex items-center gap-1 text-gray-500">
+              <span className="text-gray-400">🔭</span>
+              观察:
+              <span className={`font-medium ${(item.observe_days ?? 0) >= 3 ? 'text-amber-600' : 'text-gray-600'}`}>
+                {item.observe_days ?? 0}天
+              </span>
+            </span>
+            {/* 精选标签 */}
+            {item.is_selected ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-xs font-medium">
+                ✓ 精选
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded text-xs">
+                ○ 待观察
+              </span>
+            )}
+          </div>
+          {/* 精选时间和理由 */}
+          {item.is_selected && item.selected_time && (
+            <div className="mt-1 text-xs text-green-600">
+              精选于 {item.selected_time.split(' ')[0]}
+            </div>
+          )}
+          {item.selected_reason && (
+            <div className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded truncate" title={item.selected_reason}>
+              📝 {item.selected_reason}
+            </div>
+          )}
         </div>
       ))}
     </div>

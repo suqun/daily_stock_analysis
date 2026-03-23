@@ -115,6 +115,11 @@ class LimitGroupStockItem(BaseModel):
     """涨停分组个股"""
     code: str = Field(..., description="股票代码")
     name: str = Field(..., description="股票名称")
+    insert_time: Optional[str] = Field(None, description="插入分组时间")
+    observe_days: Optional[int] = Field(None, description="观察天数")
+    is_selected: Optional[bool] = Field(False, description="是否已加入精选自选组")
+    selected_time: Optional[str] = Field(None, description="加入精选自选组时间")
+    selected_reason: Optional[str] = Field(None, description="加入精选自选组理由")
 
 
 class LimitGroupData(BaseModel):

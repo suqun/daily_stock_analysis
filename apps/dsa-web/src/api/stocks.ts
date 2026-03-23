@@ -15,6 +15,11 @@ export type ExtractFromImageResponse = {
 export type LimitGroupStockItem = {
   code: string;
   name: string;
+  insert_time?: string;
+  observe_days?: number;
+  is_selected?: boolean;
+  selected_time?: string;
+  selected_reason?: string;
 };
 
 export type LimitGroupData = {
