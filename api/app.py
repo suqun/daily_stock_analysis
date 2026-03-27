@@ -25,7 +25,7 @@ from typing import Optional
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
@@ -119,13 +119,78 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     
     # 延迟导入以避免循环依赖
     from bot.handler import handle_qq_webhook, handle_dingtalk_webhook
+    from src.config import get_config
+    import hmac
+    import hashlib
+    import time
     
-    @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook")
-    async def qq_webhook(request: Request):
-        """QQ (OpenClaw) 机器人 Webhook 回调"""
-        headers = dict(request.headers)
-        body = await request.body()
-        return handle_qq_webhook(headers, body)
+    def verify_qq_signature(token: str, msg: str, timestamp: str, nonce: str, signature: str) -> bool:
+        """验证 QQ (OpenClaw) 签名 (SHA1 算法)"""
+        if not token or not signature:
+            return False
+        # 排序拼接：token + timestamp + nonce + msg
+        tmp_list = [token, timestamp, nonce, msg]
+        tmp_list.sort()
+        tmp_str = "".join(tmp_list)
+        expected = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    
+    @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
+    async def qq_webhook_get(request: Request):
+        """QQ (OpenClaw) Webhook 验证接口（GET）"""
+        # 获取参数
+        msg = request.query_params.get("msg", "")
+        signature = request.query_params.get("signature", "")
+        timestamp = request.query_params.get("timestamp", "")
+        nonce = request.query_params.get("nonce", "")
+        
+        # 参数检查
+        if not all([msg, signature, timestamp, nonce]):
+            return {"error": "校验失败", "reason": "缺少必要参数"}
+        
+        # 获取 Token
+        config = get_config()
+        token = getattr(config, 'qq_openclaw_token', '') or ''
+        
+        # 签名验证
+        if not verify_qq_signature(token, msg, timestamp, nonce, signature):
+            return {"error": "校验失败", "reason": "签名不匹配"}
+        
+        # 验证时间戳（5分钟内有效）
+        try:
+            request_time = int(timestamp)
+            current_time = int(time.time())
+            if abs(current_time - request_time) > 300:
+                return {"error": "校验失败", "reason": "时间戳过期"}
+        except ValueError:
+            return {"error": "校验失败", "reason": "无效时间戳"}
+        
+        # 校验通过，原封不动返回 msg
+        return PlainTextResponse(content=msg)
+    
+    @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 消息")
+    async def qq_webhook_post(request: Request):
+        """QQ (OpenClaw) 机器人 Webhook 回调（POST）- 转发给 OpenClaw"""
+        import requests
+        # 获取 OpenClaw 地址
+        config = get_config()
+        openclaw_url = getattr(config, 'qq_openclaw_url', '') or 'http://127.0.0.1:18789'
+        # 转发 POST 请求给 OpenClaw
+        try:
+            resp = requests.post(
+                f"{openclaw_url}/qq/webhook",
+                json=request.json,
+                timeout=30,
+            )
+            from fastapi.responses import Response
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                media_type="application/json",
+            )
+        except Exception as e:
+            logger.error(f"[QQ] 转发到 OpenClaw 失败: {e}")
+            return {"error": "转发失败", "reason": str(e)}
     
     @app.post("/bot/dingtalk", tags=["Bot"], summary="钉钉 Webhook")
     async def dingtalk_webhook(request: Request):
