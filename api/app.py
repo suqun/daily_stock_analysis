@@ -135,38 +135,41 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         expected = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
         return hmac.compare_digest(expected, signature)
     
-    @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
-    async def qq_webhook_get(request: Request):
-        """QQ (OpenClaw) Webhook 验证接口（GET）"""
-        # 获取参数
-        msg = request.query_params.get("msg", "")
-        signature = request.query_params.get("signature", "")
-        timestamp = request.query_params.get("timestamp", "")
-        nonce = request.query_params.get("nonce", "")
-        
-        # 参数检查
-        if not all([msg, signature, timestamp, nonce]):
-            return {"error": "校验失败", "reason": "缺少必要参数"}
-        
-        # 获取 Token
-        config = get_config()
-        token = getattr(config, 'qq_openclaw_token', '') or ''
-        
-        # 签名验证
-        if not verify_qq_signature(token, msg, timestamp, nonce, signature):
-            return {"error": "校验失败", "reason": "签名不匹配"}
-        
-        # 验证时间戳（5分钟内有效）
-        try:
-            request_time = int(timestamp)
-            current_time = int(time.time())
-            if abs(current_time - request_time) > 300:
-                return {"error": "校验失败", "reason": "时间戳过期"}
-        except ValueError:
-            return {"error": "校验失败", "reason": "无效时间戳"}
+#     @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
+    @app.get("/qq/webhook")
+    async def qq_webhook_get(msg: str):
+        return msg  # 校验专用
 
-        # ✅ 关键：只返回原始 msg，不返回任何 JSON、结构
-        return Response(content=msg, media_type="text/plain")
+#         """QQ (OpenClaw) Webhook 验证接口（GET）"""
+#         # 获取参数
+#         msg = request.query_params.get("msg", "")
+#         signature = request.query_params.get("signature", "")
+#         timestamp = request.query_params.get("timestamp", "")
+#         nonce = request.query_params.get("nonce", "")
+#
+#         # 参数检查
+#         if not all([msg, signature, timestamp, nonce]):
+#             return {"error": "校验失败", "reason": "缺少必要参数"}
+#
+#         # 获取 Token
+#         config = get_config()
+#         token = getattr(config, 'qq_openclaw_token', '') or ''
+#
+#         # 签名验证
+#         if not verify_qq_signature(token, msg, timestamp, nonce, signature):
+#             return {"error": "校验失败", "reason": "签名不匹配"}
+#
+#         # 验证时间戳（5分钟内有效）
+#         try:
+#             request_time = int(timestamp)
+#             current_time = int(time.time())
+#             if abs(current_time - request_time) > 300:
+#                 return {"error": "校验失败", "reason": "时间戳过期"}
+#         except ValueError:
+#             return {"error": "校验失败", "reason": "无效时间戳"}
+#
+#         # ✅ 关键：只返回原始 msg，不返回任何 JSON、结构
+#         return Response(content=msg, media_type="text/plain")
     
     @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 消息")
     async def qq_webhook_post(request: Request):
