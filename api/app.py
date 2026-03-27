@@ -164,9 +164,9 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 return {"error": "校验失败", "reason": "时间戳过期"}
         except ValueError:
             return {"error": "校验失败", "reason": "无效时间戳"}
-        
-        # 校验通过，原封不动返回 msg
-        return PlainTextResponse(content=msg)
+
+        # ✅ 关键：只返回原始 msg，不返回任何 JSON、结构
+        return Response(content=msg, media_type="text/plain")
     
     @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 消息")
     async def qq_webhook_post(request: Request):
