@@ -112,6 +112,28 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     # ============================================================
     
     app.include_router(api_v1_router)
+    
+    # ============================================================
+    # Bot Webhook 路由
+    # ============================================================
+    
+    # 延迟导入以避免循环依赖
+    from bot.handler import handle_qq_webhook, handle_dingtalk_webhook
+    
+    @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook")
+    async def qq_webhook(request: Request):
+        """QQ (OpenClaw) 机器人 Webhook 回调"""
+        headers = dict(request.headers)
+        body = await request.body()
+        return handle_qq_webhook(headers, body)
+    
+    @app.post("/bot/dingtalk", tags=["Bot"], summary="钉钉 Webhook")
+    async def dingtalk_webhook(request: Request):
+        """钉钉机器人 Webhook 回调"""
+        headers = dict(request.headers)
+        body = await request.body()
+        return handle_dingtalk_webhook(headers, body)
+    
     add_error_handlers(app)
     
     # ============================================================

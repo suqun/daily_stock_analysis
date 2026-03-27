@@ -539,6 +539,16 @@ class Config:
     # 飞书 Webhook
     feishu_webhook_url: Optional[str] = None
     
+    # QQ (OpenClaw) 机器人配置
+    qq_openclaw_url: Optional[str] = None  # OpenClaw 服务地址 (如 http://127.0.0.1:18789)
+    qq_openclaw_token: Optional[str] = None  # OpenClaw API Token
+    qq_admin_qq: str = ""  # 管理员 QQ 号 (多个逗号分隔)
+    qq_allow_groups: str = ""  # 允许的群号 (多个逗号分隔，空=允许所有)
+    qq_enable_private_chat: bool = True  # 是否启用私聊
+    qq_msg_rate_limit: float = 1.0  # 消息发送速率限制 (秒/条)
+    qq_daily_cmd_limit: int = 20  # 每日指令次数限制
+    qq_max_bytes: int = 5000  # 单条消息最大字节数
+    
     # Telegram 配置（需要同时配置 Bot Token 和 Chat ID）
     telegram_bot_token: Optional[str] = None  # Bot Token（@BotFather 获取）
     telegram_chat_id: Optional[str] = None  # Chat ID
@@ -1065,6 +1075,15 @@ class Config:
             feishu_app_id=os.getenv('FEISHU_APP_ID'),
             feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
+            # QQ (OpenClaw) 配置
+            qq_openclaw_url=os.getenv('QQ_OPENCLAW_URL'),
+            qq_openclaw_token=os.getenv('QQ_OPENCLAW_TOKEN'),
+            qq_admin_qq=os.getenv('QQ_ADMIN_QQ', ''),
+            qq_allow_groups=os.getenv('QQ_ALLOW_GROUPS', ''),
+            qq_enable_private_chat=os.getenv('QQ_ENABLE_PRIVATE_CHAT', 'true').lower() == 'true',
+            qq_msg_rate_limit=float(os.getenv('QQ_MSG_RATE_LIMIT', '1.0')),
+            qq_daily_cmd_limit=int(os.getenv('QQ_DAILY_CMD_LIMIT', '20')),
+            qq_max_bytes=int(os.getenv('QQ_MAX_BYTES', '5000')),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
             litellm_model=litellm_model,

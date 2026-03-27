@@ -53,6 +53,22 @@ except ImportError:
     get_feishu_stream_client = lambda: None
     start_feishu_stream_background = lambda: False
 
+# QQ (OpenClaw) 模式（可选）
+try:
+    from bot.platforms.qq import (
+        QQClient,
+        get_qq_client,
+        QQWebhookHandler,
+        handle_qq_webhook,
+        QQ_AVAILABLE,
+    )
+except ImportError:
+    QQ_AVAILABLE = False
+    QQClient = None
+    get_qq_client = lambda: None
+    QQWebhookHandler = None
+    handle_qq_webhook = lambda data: None
+
 __all__ = [
     'BotPlatform',
     'DingtalkPlatform',
@@ -70,4 +86,10 @@ __all__ = [
     'get_feishu_stream_client',
     'start_feishu_stream_background',
     'FEISHU_SDK_AVAILABLE',
+    # QQ (OpenClaw) 模式
+    'QQClient',
+    'get_qq_client',
+    'QQWebhookHandler',
+    'handle_qq_webhook',
+    'QQ_AVAILABLE',
 ]

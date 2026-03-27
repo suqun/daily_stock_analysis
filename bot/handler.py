@@ -136,3 +136,44 @@ def handle_wecom_webhook(headers: Dict[str, str], body: bytes) -> WebhookRespons
 def handle_telegram_webhook(headers: Dict[str, str], body: bytes) -> WebhookResponse:
     """处理 Telegram Webhook"""
     return handle_webhook('telegram', headers, body)
+
+
+def handle_qq_webhook(headers: Dict[str, str], body: bytes) -> WebhookResponse:
+    """
+    处理 QQ (OpenClaw) Webhook
+    
+    OpenClaw 通过 HTTP POST 调用此端点，传递消息事件。
+    """
+    from bot.platforms.qq import handle_qq_webhook as qq_handle
+    
+    logger.info("[BotHandler] 收到 QQ Webhook 请求")
+    
+    # 检查机器人功能是否启用
+    from src.config import get_config
+    config = get_config()
+    
+    if not getattr(config, 'bot_enabled', True):
+        logger.info("[BotHandler] 机器人功能未启用")
+        return WebhookResponse.success()
+    
+    # 解析 JSON 数据
+    try:
+        data = json.loads(body.decode('utf-8')) if body else {}
+    except json.JSONDecodeError as e:
+        logger.error(f"[BotHandler] QQ JSON 解析失败: {e}")
+        return WebhookResponse.error("Invalid JSON", 400)
+    
+    logger.debug(f"[BotHandler] QQ 请求数据: {json.dumps(data, ensure_ascii=False)[:500]}")
+    
+    # 处理 QQ 事件
+    try:
+        response = qq_handle(data)
+        if response:
+            # QQ 客户端已直接发送响应消息
+            return WebhookResponse.success()
+        return WebhookResponse.success()
+    except Exception as e:
+        logger.error(f"[BotHandler] QQ 处理异常: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return WebhookResponse.error(str(e), 500)
