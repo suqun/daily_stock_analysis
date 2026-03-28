@@ -246,26 +246,30 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         # ==================== 处理消息事件 ====================
         logger.info(f"[QQ] 原始数据: {data}")
         
-        # 解析消息 - 支持多种格式
-        op = data.get("op")  # 11 = 消息事件
+        # 解析消息 - 支持 QQ 机器人格式
+        op = data.get("op")
         d = data.get("d", {})
+        event_type = data.get("t", "")  # C2C_MESSAGE_CREATE = 私聊消息
         
-        # 尝试多种字段名
-        content = (
-            d.get("content") or 
-            d.get("message") or 
-            data.get("content") or 
-            data.get("message") or 
-            ""
-        )
-        user_id = str(d.get("user_id") or d.get("user_id") or "")
-        group_id = str(d.get("group_id") or d.get("group_id") or "")
-        message_type = d.get("message_type", "private")
+        # 提取消息内容
+        content = d.get("content", "")
         
-        logger.info(f"[QQ] 解析后: op={op}, type={message_type}, user={user_id}, group={group_id}, content={content[:50] if content else ''}")
+        # 提取用户信息 (author.id 或 author.user_openid)
+        author = d.get("author", {})
+        user_id = str(author.get("id") or author.get("user_openid") or "")
         
-        # 只处理消息事件 (op=11)
-        if op != 11:
+        # 判断是私聊还是群聊
+        if "C2C_MESSAGE_CREATE" in event_type:
+            chat_type_str = "private"
+        elif "GROUP_MESSAGE_CREATE" in event_type:
+            chat_type_str = "group"
+        else:
+            chat_type_str = "private"
+        
+        logger.info(f"[QQ] 解析后: op={op}, event={event_type}, user={user_id}, content={content[:50] if content else ''}")
+        
+        # 处理消息事件 (op=0 且有事件类型 或 op=11)
+        if op != 0 and op != 11:
             logger.info(f"[QQ] 忽略非消息事件: op={op}")
             return {"code": 0}
         
@@ -278,9 +282,9 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             from bot.models import BotMessage, BotResponse, ChatType
             
             # 确定聊天类型
-            if group_id:
+            if chat_type_str == "group":
                 chat_type = ChatType.GROUP
-                chat_id = group_id
+                chat_id = str(d.get("group_id", "")) or user_id
             else:
                 chat_type = ChatType.PRIVATE
                 chat_id = user_id
