@@ -43,6 +43,11 @@ class QQBotConfig:
     openclaw_url: str = ""
     openclaw_token: str = ""
     
+    # QQ 机器人官方 API
+    qq_bot_app_id: str = ""
+    qq_bot_app_secret: str = ""
+    qq_bot_token: str = ""
+    
     # 管理员
     admin_qq: List[str] = field(default_factory=list)
     
@@ -63,6 +68,9 @@ class QQBotConfig:
         return cls(
             openclaw_url=getattr(config, 'qq_openclaw_url', '') or '',
             openclaw_token=getattr(config, 'qq_openclaw_token', '') or '',
+            qq_bot_app_id=getattr(config, 'qq_bot_app_id', '') or '',
+            qq_bot_app_secret=getattr(config, 'qq_bot_app_secret', '') or '',
+            qq_bot_token=getattr(config, 'qq_bot_token', '') or '',
             admin_qq=_parse_list(getattr(config, 'qq_admin_qq', '')),
             allow_groups=_parse_list(getattr(config, 'qq_allow_groups', '')),
             enable_private_chat=getattr(config, 'qq_enable_private_chat', True),
@@ -160,6 +168,10 @@ class QQReplyClient:
         # 重试配置
         self._max_retries = 3
         self._retry_delay = 1.0
+        
+        # QQ官方API token
+        self._access_token = ""
+        self._token_expires_at = 0
     
     def _build_headers(self) -> Dict[str, str]:
         """构建请求头"""
@@ -217,6 +229,7 @@ class QQReplyClient:
         target: str,
         message: str,
         is_group: bool = False,
+        msg_id: str = None,
     ) -> bool:
         """
         发送消息到 QQ
@@ -225,12 +238,17 @@ class QQReplyClient:
             target: 目标 ID (QQ号 或 群号)
             message: 消息内容
             is_group: 是否为群聊
+            msg_id: 消息ID（用于被动回复）
             
         Returns:
             是否发送成功
         """
-        if not self._config.openclaw_url:
-            logger.warning("[QQ] OpenClaw URL 未配置")
+        # 检查是否配置了QQ官方API
+        has_qq_api = bool(self._config.qq_bot_app_id and self._config.qq_bot_token)
+        has_openclaw = bool(self._config.openclaw_url)
+        
+        if not has_qq_api and not has_openclaw:
+            logger.warning("[QQ] 未配置QQ机器人 (QQ官方API 或 OpenClaw)")
             return False
         
         # 速率限制
@@ -243,9 +261,9 @@ class QQReplyClient:
         content_bytes = len(formatted_message.encode('utf-8'))
         if content_bytes > self._config.max_bytes:
             logger.info(f"[QQ] 消息超长({content_bytes}字节)，分批发送")
-            return self._send_chunked(target, formatted_message, is_group)
+            return self._send_chunked(target, formatted_message, is_group, msg_id)
         
-        return self._send_single(target, formatted_message, is_group)
+        return self._send_single(target, formatted_message, is_group, msg_id)
     
     def _format_message(self, content: str) -> str:
         """格式化消息 (QQ 简单文本)"""
@@ -265,30 +283,144 @@ class QQReplyClient:
         target: str,
         message: str,
         is_group: bool,
+        msg_id: str = None,
     ) -> bool:
         """发送单条消息"""
         channel = "group" if is_group else "private"
         
-        payload = {
-            "channel": "qq",
-            "target": target,
-            "message": message,
-        }
+        # 优先使用QQ官方API
+        if self._config.qq_bot_app_id and self._config.qq_bot_token:
+            return self._send_via_qq_api(target, message, is_group, msg_id)
         
-        result = self._send_request("POST", "/api/message/send", payload)
+        # 回退到OpenClaw CLI
+        try:
+            import subprocess
+            
+            formatted_message = self._format_message(message)
+            
+            cmd = [
+                "openclaw", "message", "send",
+                "--channel", "qq",
+                "-t", target,
+                "-m", formatted_message,
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"[QQ] 消息发送成功 -> {channel}:{target}")
+                return True
+            else:
+                logger.error(f"[QQ] 消息发送失败: {result.stderr.strip()}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"[QQ] 发送消息异常: {e}")
+            return False
+    
+    def _send_via_qq_api(
+        self,
+        target: str,
+        message: str,
+        is_group: bool,
+        msg_id: str = None,
+    ) -> bool:
+        """通过QQ官方API发送消息"""
+        try:
+            formatted_message = self._format_message(message)
+            
+            access_token = self._get_access_token()
+            if not access_token:
+                logger.error("[QQ] 无法获取access_token")
+                return False
+            
+            headers = {
+                "Authorization": f"QQBot {access_token}",
+                "Content-Type": "application/json",
+            }
+            
+            if is_group:
+                # 群消息 - 发送到子频道
+                # 需要channel_id，这里简化处理
+                logger.warning("[QQ] 群消息发送需要channel_id")
+                return False
+            else:
+                # 私聊消息 - 使用 /v2/users/{openid}/messages
+                url = f"https://api.sgroup.qq.com/v2/users/{target}/messages"
+                import random
+                payload = {
+                    "msg_id": msg_id,
+                    "msg_type": 0,  # 文本消息
+                    "msg_seq": random.randint(2, 100),  # 避免重复发送
+                    "content": formatted_message,
+                }
+            
+            response = self._session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=30,
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"[QQ] 消息发送成功")
+                return True
+            else:
+                logger.error(f"[QQ] 消息发送失败: {response.status_code} {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"[QQ] 发送消息异常: {e}")
+            return False
+    
+    def _get_access_token(self) -> str:
+        """获取QQ机器人access_token"""
+        import time
         
-        if result and result.get("status") == "sent":
-            logger.info(f"[QQ] 消息发送成功 -> {channel}:{target}")
-            return True
+        now = time.time()
+        if hasattr(self, '_access_token') and hasattr(self, '_token_expires_at'):
+            if now < self._token_expires_at:
+                return self._access_token
         
-        logger.error(f"[QQ] 消息发送失败: {result}")
-        return False
+        if not self._config.qq_bot_app_id or not self._config.qq_bot_app_secret:
+            logger.error("[QQ] QQ机器人AppID或Secret未配置")
+            return ""
+        
+        try:
+            url = "https://bots.qq.com/app/getAppAccessToken"
+            json_data = {
+                "appId": self._config.qq_bot_app_id,
+                "clientSecret": self._config.qq_bot_app_secret,
+            }
+            
+            response = self._session.post(url, json=json_data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                self._access_token = result.get("access_token", "")
+                expires_in = int(result.get("expires_in", 0))
+                self._token_expires_at = now + expires_in - 300
+                logger.info(f"[QQ] access_token获取成功，有效期 {expires_in}秒")
+                return self._access_token
+            else:
+                logger.error(f"[QQ] access_token获取失败: {response.status_code} {response.text}")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"[QQ] access_token获取异常: {e}")
+            return ""
     
     def _send_chunked(
         self,
         target: str,
         message: str,
         is_group: bool,
+        msg_id: str = None,
     ) -> bool:
         """分批发送长消息"""
         chunks = chunk_content_by_max_bytes(
@@ -301,7 +433,7 @@ class QQReplyClient:
         total = len(chunks)
         
         for i, chunk in enumerate(chunks):
-            if self._send_single(target, chunk, is_group):
+            if self._send_single(target, chunk, is_group, msg_id):
                 success_count += 1
             if i < total - 1:
                 time.sleep(1)  # 批次间隔
@@ -547,20 +679,50 @@ def get_qq_client() -> Optional[QQReplyClient]:
             config = get_config()
             qq_config = QQBotConfig.from_config(config)
             
-            if not qq_config.openclaw_url:
-                logger.info("[QQ] OpenClaw URL 未配置，跳过初始化")
+            # 检查是否配置了 QQ 官方 API 或 OpenClaw
+            has_qq_api = bool(qq_config.qq_bot_app_id and qq_config.qq_bot_token)
+            has_openclaw = bool(qq_config.openclaw_url)
+            
+            if not has_qq_api and not has_openclaw:
+                logger.info("[QQ] 未配置 QQ 机器人，跳过初始化")
                 return None
             
             _qq_client = QQReplyClient(qq_config)
             _qq_handler = QQWebhookHandler(_qq_client)
             
-            logger.info(f"[QQ] 客户端初始化成功: {qq_config.openclaw_url}")
+            logger.info(f"[QQ] 客户端初始化成功")
             
         except Exception as e:
             logger.error(f"[QQ] 客户端初始化失败: {e}")
             return None
     
     return _qq_client
+
+
+def get_qq_reply_client(config=None) -> Optional[QQReplyClient]:
+    """
+    获取 QQ 回复客户端（用于通知推送）
+    
+    Args:
+        config: 配置对象，如果为 None 则从全局配置获取
+        
+    Returns:
+        QQReplyClient 实例
+    """
+    if config is None:
+        config = get_config()
+    
+    qq_config = QQBotConfig.from_config(config)
+    
+    # 检查是否配置了 QQ 官方 API 或 OpenClaw
+    has_qq_api = bool(qq_config.qq_bot_app_id and qq_config.qq_bot_token)
+    has_openclaw = bool(qq_config.openclaw_url)
+    
+    if not has_qq_api and not has_openclaw:
+        logger.warning("[QQ] 未配置 QQ 机器人")
+        return None
+    
+    return QQReplyClient(qq_config)
 
 
 def get_qq_handler() -> Optional[QQWebhookHandler]:

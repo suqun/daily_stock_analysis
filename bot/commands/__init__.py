@@ -15,6 +15,7 @@ from bot.commands.market import MarketCommand
 from bot.commands.batch import BatchCommand
 from bot.commands.ask import AskCommand
 from bot.commands.chat import ChatCommand
+from bot.commands.list import ListCommand
 
 # 所有可用命令（用于自动注册）
 ALL_COMMANDS = [
@@ -25,6 +26,7 @@ ALL_COMMANDS = [
     BatchCommand,
     AskCommand,
     ChatCommand,
+    ListCommand,
 ]
 
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
     'BatchCommand',
     'AskCommand',
     'ChatCommand',
+    'ListCommand',
     'MarketCommand',
     'BatchCommand',
     'ALL_COMMANDS',
