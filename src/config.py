@@ -550,6 +550,11 @@ class Config:
     qq_daily_cmd_limit: int = 20  # 每日指令次数限制
     qq_max_bytes: int = 5000  # 单条消息最大字节数
     
+    # QQ 机器人官方 API 配置（优先级高于 OpenClaw）
+    qq_bot_app_id: Optional[str] = None  # QQ 机器人 AppID
+    qq_bot_app_secret: Optional[str] = None  # QQ 机器人 AppSecret
+    qq_bot_token: Optional[str] = None  # QQ 机器人 Token (通过 AppID/Secret 获取)
+    
     # Telegram 配置（需要同时配置 Bot Token 和 Chat ID）
     telegram_bot_token: Optional[str] = None  # Bot Token（@BotFather 获取）
     telegram_chat_id: Optional[str] = None  # Chat ID
@@ -1086,6 +1091,10 @@ class Config:
             qq_msg_rate_limit=float(os.getenv('QQ_MSG_RATE_LIMIT', '1.0')),
             qq_daily_cmd_limit=int(os.getenv('QQ_DAILY_CMD_LIMIT', '20')),
             qq_max_bytes=int(os.getenv('QQ_MAX_BYTES', '5000')),
+            # QQ 机器人官方 API
+            qq_bot_app_id=os.getenv('QQ_BOT_APP_ID'),
+            qq_bot_app_secret=os.getenv('QQ_BOT_APP_SECRET'),
+            qq_bot_token=os.getenv('QQ_BOT_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
             litellm_model=litellm_model,

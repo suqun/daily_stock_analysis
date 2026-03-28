@@ -48,6 +48,24 @@ async def app_lifespan(app: FastAPI):
             delattr(app.state, "system_config_service")
 
 
+# QQ 回复客户端缓存（模块级别）
+_qq_reply_client = None
+
+def get_qq_reply_client(config):
+    """获取 QQ 回复客户端"""
+    global _qq_reply_client
+    if _qq_reply_client is None:
+        try:
+            from bot.platforms.qq.qq_client import QQReplyClient, QQBotConfig
+            qq_config = QQBotConfig.from_config(config)
+            if qq_config.openclaw_url:
+                _qq_reply_client = QQReplyClient(qq_config)
+        except Exception as e:
+            logger.error(f"[QQ] 创建回复客户端失败: {e}")
+            return None
+    return _qq_reply_client
+
+
 def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     """
     创建并配置 FastAPI 应用实例
@@ -137,25 +155,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         tmp_str = "".join(tmp_list)
         expected = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
         return hmac.compare_digest(expected, signature)
-    
-    # QQ 回复客户端缓存
-    _qq_reply_client = None
-    
-    def get_qq_reply_client(config):
-        """获取 QQ 回复客户端"""
-        global _qq_reply_client
-        if _qq_reply_client is None:
-            try:
-                from bot.platforms.qq.qq_client import QQReplyClient, QQBotConfig
-                qq_config = QQBotConfig.from_config(config)
-                if qq_config.openclaw_url:
-                    _qq_reply_client = QQReplyClient(qq_config)
-            except Exception as e:
-                logger.error(f"[QQ] 创建回复客户端失败: {e}")
-                return None
-        return _qq_reply_client
-    
-#     @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
+    # @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
     @app.get("/qq/webhook")
     async def qq_webhook_get(msg: str):
         return msg  # 校验专用
@@ -289,10 +289,13 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 chat_type = ChatType.PRIVATE
                 chat_id = user_id
             
+            # 提取消息ID (QQ机器人消息在 d.id)
+            msg_id = str(d.get("id", ""))
+            
             # 创建消息对象
             bot_message = BotMessage(
                 platform="qq",
-                message_id=str(d.get("message_id", "")),
+                message_id=msg_id,
                 user_id=user_id,
                 user_name=user_id,
                 chat_id=chat_id,
@@ -313,35 +316,15 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             if response and response.text:
                 logger.info(f"[QQ] 命令处理结果: {response.text[:100]}...")
                 
-                # 直接通过 OpenClaw API 发送回复
-                openclaw_url = getattr(config, 'qq_openclaw_url', '') or 'http://127.0.0.1:18789'
-                openclaw_token = getattr(config, 'qq_openclaw_token', '') or ''
-                
                 try:
-                    import requests
-                    # 根据消息类型选择发送接口
-                    if chat_type == ChatType.GROUP:
-                        send_url = f"{openclaw_url}/api/message/send"
-                        payload = {
-                            "channel": "qq",
-                            "target": chat_id,
-                            "message": response.text,
-                        }
+                    qq_client = get_qq_reply_client(config)
+                    if qq_client:
+                        is_group = chat_type == ChatType.GROUP
+                        msg_id = bot_message.message_id
+                        success = qq_client.send_message(chat_id, response.text, is_group, msg_id)
+                        logger.info(f"[QQ] 发送回复结果: {'成功' if success else '失败'}")
                     else:
-                        send_url = f"{openclaw_url}/api/message/send"
-                        payload = {
-                            "channel": "qq",
-                            "target": chat_id,
-                            "message": response.text,
-                        }
-                    
-                    headers = {}
-                    if openclaw_token:
-                        headers["Authorization"] = f"Bearer {openclaw_token}"
-                    
-                    resp = requests.post(send_url, json=payload, headers=headers, timeout=30)
-                    logger.info(f"[QQ] 发送回复结果: {resp.status_code} {resp.text}")
-                    
+                        logger.warning("[QQ] 无法获取回复客户端")
                 except Exception as e:
                     logger.error(f"[QQ] 发送回复失败: {e}")
             
