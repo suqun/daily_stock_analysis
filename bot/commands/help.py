@@ -76,33 +76,45 @@ class HelpCommand(BotCommand):
             "",
         ]
         
+        # 只显示核心命令
+        core_commands = ["analyze", "market", "help"]
+        
         for cmd in commands:
+            if cmd.name not in core_commands:
+                continue
+            
             # 命令名和别名
             aliases_str = ""
             if cmd.aliases:
-                # 过滤掉中文别名，只显示英文别名
+                # 过滤掉中文别名，显示英文别名
                 en_aliases = [a for a in cmd.aliases if a.isascii()]
                 if en_aliases:
                     aliases_str = f" ({', '.join(prefix + a for a in en_aliases[:2])})"
             
-            lines.append(f"• {prefix}{cmd.name}{aliases_str} - {cmd.description}")
+            # 针对 analyze 命令添加特殊说明
+            desc = cmd.description
+            if cmd.name == "analyze":
+                desc = "分析股票（每日5次）"
+            
+            lines.append(f"• {prefix}{cmd.name}{aliases_str} {self._get_cmd_args(cmd)} - {desc}")
             lines.append("")
 
         lines.extend([
             "",
-            "---",
-            f"💡 输入 {prefix}help <命令名> 查看详细用法",
+            "💡 **示例：**",
             "",
-            "**示例：**",
-            "",
-            f"• {prefix}analyze 301023 - 奕帆传动",
-            "",
-            f"• {prefix}market - 查看大盘复盘",
-            "",
-            f"• {prefix}batch - 批量分析自选股",
+            f"```\n{prefix}analyze 301023\n{prefix}market\n```",
         ])
         
         return "\n".join(lines)
+    
+    def _get_cmd_args(self, cmd: BotCommand) -> str:
+        """获取命令参数"""
+        if cmd.name == "analyze":
+            return "股票代码"
+        elif cmd.name == "market":
+            return ""
+        return ""
     
     def _format_command_help(self, command: BotCommand, prefix: str) -> str:
         """格式化单个命令的详细帮助"""
