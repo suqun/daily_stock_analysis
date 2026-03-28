@@ -13,7 +13,7 @@ pkill -f "openclaw"
 sleep 1
 
 # 后台启动
-nohup openclaw > openclaw.log 2>&1 &
+nohup npx openclaw > openclaw.log 2>&1 &
 
 echo "✅ OpenClaw 启动完成！"
 echo "📄 日志: tail -f openclaw.log"
