@@ -22,6 +22,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import logging
+logger = logging.getLogger(__name__)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -135,6 +138,23 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         expected = hashlib.sha1(tmp_str.encode("utf-8")).hexdigest()
         return hmac.compare_digest(expected, signature)
     
+    # QQ 回复客户端缓存
+    _qq_reply_client = None
+    
+    def get_qq_reply_client(config):
+        """获取 QQ 回复客户端"""
+        global _qq_reply_client
+        if _qq_reply_client is None:
+            try:
+                from bot.platforms.qq.qq_client import QQReplyClient, QQBotConfig
+                qq_config = QQBotConfig.from_config(config)
+                if qq_config.openclaw_url:
+                    _qq_reply_client = QQReplyClient(qq_config)
+            except Exception as e:
+                logger.error(f"[QQ] 创建回复客户端失败: {e}")
+                return None
+        return _qq_reply_client
+    
 #     @app.get("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 验证")
     @app.get("/qq/webhook")
     async def qq_webhook_get(msg: str):
@@ -175,14 +195,14 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     async def qq_webhook_post(request: Request):
         """
         QQ (OpenClaw) Webhook 回调
-        - POST: 处理校验请求 (Ed25519签名) 或 转发消息给 OpenClaw
+        - POST: 处理校验请求 (Ed25519签名) 或 处理消息
         """
-        import requests
         config = get_config()
         bot_secret = getattr(config, 'qq_openclaw_secret', None) or ''
         
         try:
-            data = request.json
+            data = await request.json()
+            logger.info(f"[QQ] 收到请求: {data}")
         except Exception:
             return {"error": "Invalid JSON"}, 400
         
@@ -223,22 +243,78 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 logger.error(f"[QQ] Ed25519 签名失败: {e}")
                 return {"error": str(e)}, 500
         
-        # 普通消息请求：转发给 OpenClaw
-        openclaw_url = getattr(config, 'qq_openclaw_url', '') or 'http://127.0.0.1:18789'
+        # ==================== 处理消息事件 ====================
+        # 解析消息
+        op = data.get("op")  # 11 = 消息事件
+        d = data.get("d", {})
+        
+        # 提取消息信息
+        message_type = d.get("message_type", "")  # private / group
+        content = d.get("content", "")  # 消息内容
+        user_id = str(d.get("user_id", ""))
+        group_id = str(d.get("group_id", "")) if d.get("group_id") else ""
+        
+        logger.info(f"[QQ] 收到消息: op={op}, type={message_type}, user={user_id}, content={content[:50]}")
+        
+        # 只处理消息事件 (op=11)
+        if op != 11:
+            logger.info(f"[QQ] 忽略非消息事件: op={op}")
+            return {"code": 0}
+        
+        if not content:
+            return {"code": 0}
+        
+        # 调用命令处理器
         try:
-            resp = requests.post(
-                f"{openclaw_url}/qq/webhook",
-                json=request.json,
-                timeout=30,
+            from bot.dispatcher import get_dispatcher
+            from bot.models import BotMessage, BotResponse, ChatType
+            
+            # 确定聊天类型
+            if group_id:
+                chat_type = ChatType.GROUP
+                chat_id = group_id
+            else:
+                chat_type = ChatType.PRIVATE
+                chat_id = user_id
+            
+            # 创建消息对象
+            bot_message = BotMessage(
+                platform="qq",
+                message_id=str(d.get("message_id", "")),
+                user_id=user_id,
+                user_name=user_id,
+                chat_id=chat_id,
+                chat_type=chat_type,
+                content=content.strip(),
+                raw_content=content,
+                mentioned=False,
+                mentions=[],
+                timestamp=datetime.now(),
+                raw_data=data,
             )
-            return Response(
-                content=resp.content,
-                status_code=resp.status_code,
-                media_type="application/json",
-            )
+            
+            # 分发处理
+            dispatcher = get_dispatcher()
+            response = dispatcher.dispatch(bot_message)
+            
+            # 发送回复
+            if response and response.text:
+                reply_client = get_qq_reply_client(config)
+                if reply_client:
+                    reply_client.send_message(
+                        target=chat_id,
+                        message=response.text,
+                        is_group=(chat_type == ChatType.GROUP),
+                    )
+                    logger.info(f"[QQ] 已回复: {response.text[:50]}...")
+            
+            return {"code": 0}
+            
         except Exception as e:
-            logger.error(f"[QQ] 转发到 OpenClaw 失败: {e}")
-            return {"error": "转发失败", "reason": str(e)}, 500
+            logger.error(f"[QQ] 处理消息失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {"code": -1, "error": str(e)}
     
     @app.post("/bot/dingtalk", tags=["Bot"], summary="钉钉 Webhook")
     async def dingtalk_webhook(request: Request):
