@@ -10,6 +10,11 @@ echo "========================"
 echo "启动 OpenClaw 端口: $PORT"
 echo "========================"
 
+# 杀掉旧进程
+echo "正在停止旧进程..."
+pkill -f "openclaw"
+sleep 1
+
 # 后台启动
 nohup openclaw --port $PORT > openclaw.log 2>&1 &
 
