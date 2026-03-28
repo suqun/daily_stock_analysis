@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-===================================
+==================================
 VIP 绑定命令
 ==================================
 
@@ -12,7 +12,10 @@ from typing import List, Optional
 
 from bot.commands.base import BotCommand
 from bot.models import BotMessage, BotResponse
-from src.services.vip_service import is_vip, get_vip_info, get_vip_count
+from src.services.vip_service import (
+    bind_qq, is_vip as check_is_vip, 
+    get_bind_info, get_vip_count, get_free_usage
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ class BindCommand(BotCommand):
 
     @property
     def aliases(self) -> List[str]:
-        return ["绑定", "vip", "会员"]
+        return ["绑定"]
 
     @property
     def description(self) -> str:
@@ -50,10 +53,11 @@ class BindCommand(BotCommand):
         return None
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
+        qq = message.user_id
+
         if not args:
             return BotResponse(
                 text=self._get_help_text(),
-                success=True,
             )
 
         nickname = " ".join(args).strip()
@@ -61,27 +65,12 @@ class BindCommand(BotCommand):
         if not nickname:
             return BotResponse(
                 text="请输入要绑定的昵称",
-                success=False,
             )
 
-        if is_vip(nickname):
-            info = get_vip_info(nickname)
-            extra_info = ""
-            if info:
-                for k, v in info.items():
-                    if k.lower() != "nickname" and v:
-                        extra_info += f"\n{k}: {v}"
-
-            return BotResponse(
-                text=f"✅ 验证成功！\n\n昵称: {nickname}\nVIP 状态: 已开通" + extra_info,
-                success=True,
-            )
-        else:
-            vip_count = get_vip_count()
-            return BotResponse(
-                text=f"❌ 验证失败\n\n未找到成员 [{nickname}]\n\n请检查：\n1. 昵称是否正确\n2. 是否已加入知识星球\n3. 是否刚加入（等待10分钟同步）\n\n当前VIP总数: {vip_count}",
-                success=False,
-            )
+        ok, msg = bind_qq(qq, nickname)
+        return BotResponse(
+            text=msg,
+        )
 
     def _get_help_text(self) -> str:
         return """📖 VIP 绑定说明
@@ -98,3 +87,45 @@ class BindCommand(BotCommand):
 3. 使用 /bind 你的昵称 绑定
 
 如有疑问请联系管理员"""
+
+
+class VipStatusCommand(BotCommand):
+    """查询 VIP 状态"""
+
+    @property
+    def name(self) -> str:
+        return "vip"
+
+    @property
+    def aliases(self) -> List[str]:
+        return ["会员", "vip状态"]
+
+    @property
+    def description(self) -> str:
+        return "查询VIP会员状态"
+
+    @property
+    def usage(self) -> str:
+        return "/vip"
+
+    def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
+        qq = message.user_id
+
+        bind_info = get_bind_info(qq)
+        if not bind_info:
+            return BotResponse(
+                text="⚠️ 你还未绑定\n\n用法: /bind 你的星球昵称\n\n先加入知识星球，然后绑定即可开通VIP",
+            )
+
+        is_vip = check_is_vip(qq)
+        if not is_vip:
+            return BotResponse(
+                text="⚠️ 你的VIP已过期\n\n请续费后重新绑定",
+            )
+
+        return BotResponse(
+            text=f"""✅ VIP会员正常
+星球昵称：{bind_info['nickname']}
+绑定时间：{bind_info['bind_time']}
+全部功能已解锁""",
+        )

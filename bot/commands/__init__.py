@@ -16,7 +16,7 @@ from bot.commands.batch import BatchCommand
 from bot.commands.ask import AskCommand
 from bot.commands.chat import ChatCommand
 from bot.commands.list import ListCommand
-from bot.commands.bind import BindCommand
+from bot.commands.bind import BindCommand, VipStatusCommand
 
 # 所有可用命令（用于自动注册）
 ALL_COMMANDS = [
@@ -29,6 +29,7 @@ ALL_COMMANDS = [
     ChatCommand,
     ListCommand,
     BindCommand,
+    VipStatusCommand,
 ]
 
 __all__ = [

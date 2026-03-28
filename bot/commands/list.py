@@ -16,6 +16,8 @@ from bot.models import BotMessage, BotResponse
 
 logger = logging.getLogger(__name__)
 
+from src.services.vip_service import is_vip as check_is_vip
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -47,6 +49,12 @@ class ListCommand(BotCommand):
     
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         """执行策略列表命令"""
+        qq = message.user_id
+
+        if not check_is_vip(qq):
+            return BotResponse(
+                text="⚠️ 此指令仅限 VIP 会员使用\n\n加入知识星球后发送 /bind 昵称 开通 VIP",
+            )
         strategies = self._load_strategies()
         
         if not strategies:
