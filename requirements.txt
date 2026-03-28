@@ -64,3 +64,7 @@ jinja2>=3.1.0               # Jinja2 template engine for report rendering
 fastapi>=0.109.0            # 现代 Python Web 框架
 uvicorn[standard]>=0.27.0   # ASGI 服务器
 python-multipart>=0.0.6     # FastAPI File/Form upload support
+
+# 知识星球自动同步
+playwright>=1.40.0          # 浏览器自动化（知识星球自动下载）
+pyee>=11.0.0                # Playwright 依赖
