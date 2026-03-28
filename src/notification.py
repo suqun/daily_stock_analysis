@@ -363,6 +363,24 @@ class NotificationService(
         if not chat_id:
             return None
         return {"chat_id": chat_id}
+    
+    def _extract_qq_reply_info(self) -> Optional[Dict[str, str]]:
+        """
+        从来源消息中提取 QQ 回复信息（用于 QQ 机器人回复）
+        
+        Returns:
+            包含 user_id, chat_id, message_id 的字典，或 None
+        """
+        if not isinstance(self._source_message, BotMessage):
+            return None
+        if getattr(self._source_message, "platform", "") != "qq":
+            return None
+        user_id = getattr(self._source_message, "user_id", "")
+        chat_id = getattr(self._source_message, "chat_id", "")
+        message_id = getattr(self._source_message, "message_id", "")
+        if not user_id:
+            return None
+        return {"user_id": user_id, "chat_id": chat_id, "message_id": message_id}
 
     def send_to_context(self, content: str) -> bool:
         """
@@ -405,8 +423,62 @@ class NotificationService(
             except Exception as e:
                 logger.error(f"飞书会话（Stream）推送异常: {e}")
 
+        # 尝试 QQ 会话
+        qq_info = self._extract_qq_reply_info()
+        if qq_info:
+            try:
+                if self._send_qq_reply(qq_info, content):
+                    logger.info("已通过 QQ 私聊推送报告")
+                    success = True
+                else:
+                    logger.error("QQ 私聊推送失败")
+            except Exception as e:
+                logger.error(f"QQ 私聊推送异常: {e}")
+
         return success
 
+    def _send_qq_reply(self, qq_info: Dict[str, str], content: str) -> bool:
+        """
+        通过 QQ 机器人发送消息回复用户
+        
+        Args:
+            qq_info: 包含 user_id, chat_id, message_id 的字典
+            content: 消息内容
+            
+        Returns:
+            是否发送成功
+        """
+        try:
+            from bot.platforms.qq.qq_client import get_qq_reply_client
+            from src.config import get_config
+            
+            config = get_config()
+            qq_client = get_qq_reply_client(config)
+            
+            if not qq_client:
+                logger.warning("QQ 客户端不可用")
+                return False
+            
+            user_id = qq_info.get("user_id", "")
+            message_id = qq_info.get("message_id", "")
+            
+            # 简化内容，移除过长部分
+            max_chars = 3000
+            if len(content) > max_chars:
+                content = content[:max_chars] + "\n\n...(报告过长，仅显示部分)"
+            
+            success = qq_client.send_message(
+                target=user_id,
+                message=content,
+                is_group=False,
+                msg_id=message_id,
+            )
+            return success
+            
+        except Exception as e:
+            logger.error(f"QQ 回复异常: {e}")
+            return False
+    
     def _send_feishu_stream_reply(self, chat_id: str, content: str) -> bool:
         """
         通过飞书 Stream 模式发送消息到指定会话

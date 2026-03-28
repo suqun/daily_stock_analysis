@@ -352,9 +352,11 @@ class QQReplyClient:
             else:
                 # 私聊消息 - 使用 /v2/users/{openid}/messages
                 url = f"https://api.sgroup.qq.com/v2/users/{target}/messages"
+                import random
                 payload = {
                     "msg_id": msg_id,
                     "msg_type": 0,  # 文本消息
+                    "msg_seq": random.randint(2, 100),  # 避免重复发送
                     "content": formatted_message,
                 }
             
@@ -677,20 +679,50 @@ def get_qq_client() -> Optional[QQReplyClient]:
             config = get_config()
             qq_config = QQBotConfig.from_config(config)
             
-            if not qq_config.openclaw_url:
-                logger.info("[QQ] OpenClaw URL 未配置，跳过初始化")
+            # 检查是否配置了 QQ 官方 API 或 OpenClaw
+            has_qq_api = bool(qq_config.qq_bot_app_id and qq_config.qq_bot_token)
+            has_openclaw = bool(qq_config.openclaw_url)
+            
+            if not has_qq_api and not has_openclaw:
+                logger.info("[QQ] 未配置 QQ 机器人，跳过初始化")
                 return None
             
             _qq_client = QQReplyClient(qq_config)
             _qq_handler = QQWebhookHandler(_qq_client)
             
-            logger.info(f"[QQ] 客户端初始化成功: {qq_config.openclaw_url}")
+            logger.info(f"[QQ] 客户端初始化成功")
             
         except Exception as e:
             logger.error(f"[QQ] 客户端初始化失败: {e}")
             return None
     
     return _qq_client
+
+
+def get_qq_reply_client(config=None) -> Optional[QQReplyClient]:
+    """
+    获取 QQ 回复客户端（用于通知推送）
+    
+    Args:
+        config: 配置对象，如果为 None 则从全局配置获取
+        
+    Returns:
+        QQReplyClient 实例
+    """
+    if config is None:
+        config = get_config()
+    
+    qq_config = QQBotConfig.from_config(config)
+    
+    # 检查是否配置了 QQ 官方 API 或 OpenClaw
+    has_qq_api = bool(qq_config.qq_bot_app_id and qq_config.qq_bot_token)
+    has_openclaw = bool(qq_config.openclaw_url)
+    
+    if not has_qq_api and not has_openclaw:
+        logger.warning("[QQ] 未配置 QQ 机器人")
+        return None
+    
+    return QQReplyClient(qq_config)
 
 
 def get_qq_handler() -> Optional[QQWebhookHandler]:
