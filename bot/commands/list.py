@@ -53,7 +53,7 @@ class ListCommand(BotCommand):
 
         if not check_is_vip(qq):
             return BotResponse(
-                text="⚠️ 此指令仅限 VIP 会员使用\n\n加入知识星球后发送 /bind 昵称 开通 VIP",
+                text="⚠️ 此为会员专属功能\n知识星球搜索：356745\n加入后发送 /bind 星球昵称 即可开通",
             )
         strategies = self._load_strategies()
         

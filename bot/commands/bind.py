@@ -114,7 +114,7 @@ class VipStatusCommand(BotCommand):
         bind_info = get_bind_info(qq)
         if not bind_info:
             return BotResponse(
-                text="⚠️ 你还未绑定\n\n用法: /bind 你的星球昵称\n\n先加入知识星球，然后绑定即可开通VIP",
+                text="⚠️ 此为会员专属功能\n知识星球搜索：356745\n加入后发送 /bind 星球昵称 即可开通",
             )
 
         is_vip = check_is_vip(qq)

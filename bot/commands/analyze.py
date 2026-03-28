@@ -75,7 +75,7 @@ class AnalyzeCommand(BotCommand):
             ok, used = check_free_limit(qq)
             if not ok:
                 return BotResponse(
-                    text=f"❌ 今日免费次数已用完\n\n每天免费 5 次\n\n开通 VIP 可无限次使用\n\n加入知识星球后发送 /bind 昵称 开通 VIP",
+                    text="⚠️ 此为会员专属功能\n知识星球搜索：356745\n加入后发送 /bind 星球昵称 即可开通",
                 )
 
         code = canonical_stock_code(args[0])
