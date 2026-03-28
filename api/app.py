@@ -171,21 +171,66 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 #         # ✅ 关键：只返回原始 msg，不返回任何 JSON、结构
 #         return Response(content=msg, media_type="text/plain")
     
-    @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook 消息")
+    @app.post("/qq/webhook", tags=["Bot"], summary="QQ (OpenClaw) Webhook")
     async def qq_webhook_post(request: Request):
-        """QQ (OpenClaw) 机器人 Webhook 回调（POST）- 转发给 OpenClaw"""
+        """
+        QQ (OpenClaw) Webhook 回调
+        - POST: 处理校验请求 (Ed25519签名) 或 转发消息给 OpenClaw
+        """
         import requests
-        # 获取 OpenClaw 地址
         config = get_config()
+        bot_secret = getattr(config, 'qq_openclaw_secret', None) or ''
+        
+        try:
+            data = request.json
+        except Exception:
+            return {"error": "Invalid JSON"}, 400
+        
+        # 判断是否是 QQ 官方校验请求 (有 d.plain_token)
+        if data and isinstance(data, dict) and "d" in data and "plain_token" in data.get("d", {}):
+            # QQ 官方校验请求：需要 Ed25519 签名
+            if not bot_secret:
+                logger.error("[QQ] 未配置 QQ_OPENCLAW_SECRET")
+                return {"error": "配置错误"}, 500
+            
+            try:
+                from cryptography.hazmat.primitives.asymmetric import ed25519
+                
+                d = data["d"]
+                plain_token = d["plain_token"]
+                event_ts = d["event_ts"]
+                
+                # 官方 GO 逻辑：复制 secret 到 32 字节
+                seed = bot_secret
+                while len(seed) < 32:
+                    seed += seed
+                seed = seed[:32].encode("utf-8")
+                
+                # Ed25519 私钥
+                private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+                
+                # 拼接消息：event_ts + plain_token
+                msg = (event_ts + plain_token).encode("utf-8")
+                
+                # 签名 → 十六进制
+                signature = private_key.sign(msg).hex()
+                
+                return {
+                    "plain_token": plain_token,
+                    "signature": signature
+                }
+            except Exception as e:
+                logger.error(f"[QQ] Ed25519 签名失败: {e}")
+                return {"error": str(e)}, 500
+        
+        # 普通消息请求：转发给 OpenClaw
         openclaw_url = getattr(config, 'qq_openclaw_url', '') or 'http://127.0.0.1:18789'
-        # 转发 POST 请求给 OpenClaw
         try:
             resp = requests.post(
                 f"{openclaw_url}/qq/webhook",
                 json=request.json,
                 timeout=30,
             )
-            from fastapi.responses import Response
             return Response(
                 content=resp.content,
                 status_code=resp.status_code,
@@ -193,7 +238,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             )
         except Exception as e:
             logger.error(f"[QQ] 转发到 OpenClaw 失败: {e}")
-            return {"error": "转发失败", "reason": str(e)}
+            return {"error": "转发失败", "reason": str(e)}, 500
     
     @app.post("/bot/dingtalk", tags=["Bot"], summary="钉钉 Webhook")
     async def dingtalk_webhook(request: Request):

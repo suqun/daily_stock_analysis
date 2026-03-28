@@ -542,6 +542,7 @@ class Config:
     # QQ (OpenClaw) 机器人配置
     qq_openclaw_url: Optional[str] = None  # OpenClaw 服务地址 (如 http://127.0.0.1:18789)
     qq_openclaw_token: Optional[str] = None  # OpenClaw API Token
+    qq_openclaw_secret: Optional[str] = None  # OpenClaw AppSecret (Ed25519 签名验证用)
     qq_admin_qq: str = ""  # 管理员 QQ 号 (多个逗号分隔)
     qq_allow_groups: str = ""  # 允许的群号 (多个逗号分隔，空=允许所有)
     qq_enable_private_chat: bool = True  # 是否启用私聊
@@ -1078,6 +1079,7 @@ class Config:
             # QQ (OpenClaw) 配置
             qq_openclaw_url=os.getenv('QQ_OPENCLAW_URL'),
             qq_openclaw_token=os.getenv('QQ_OPENCLAW_TOKEN'),
+            qq_openclaw_secret=os.getenv('QQ_OPENCLAW_SECRET'),
             qq_admin_qq=os.getenv('QQ_ADMIN_QQ', ''),
             qq_allow_groups=os.getenv('QQ_ALLOW_GROUPS', ''),
             qq_enable_private_chat=os.getenv('QQ_ENABLE_PRIVATE_CHAT', 'true').lower() == 'true',
