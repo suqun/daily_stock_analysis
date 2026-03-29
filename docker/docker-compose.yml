@@ -80,11 +80,11 @@ services:
 
   # QQ 机器人 (OpenClaw)
   openclaw:
-    image: node:20-slim
+    image: node:22-slim
     container_name: stock-openclaw
     restart: unless-stopped
     working_dir: /app
-    command: sh -c "npm install -g openclaw-gateway && openclaw"
+    command: sh -c "npm install -g openclaw-gateway@0.5.5 && openclaw"
     ports:
       - "18789:18789"
     environment:
