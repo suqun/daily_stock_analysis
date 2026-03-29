@@ -3,8 +3,8 @@
 # ===================================
 # 
 # 使用方式:
-#   cd /volume1/docker/stock/daily_stock_analysis
-#   docker-compose -f docker/docker-compose.yml up -d --build
+#   cd /volume1/docker/stock
+#   docker-compose -f daily_stock_analysis/docker/docker-compose.yml up -d --build
 #
 # NAS目录结构:
 #   /volume1/docker/stock/
@@ -19,22 +19,22 @@ version: '3.8'
 
 x-common: &common
   build:
-    context: ..
+    context: daily_stock_analysis
     dockerfile: docker/Dockerfile
   restart: unless-stopped
 
   # 环境变量（从 .env 文件加载）
   env_file:
-    - ../.env
+    - .env
 
   volumes:
-    - ../data:/app/data
-    - ../logs:/app/logs
-    - ../reports:/app/reports
-    - ../.env:/app/.env:ro
-    - ../strategies:/app/strategies:ro
+    - ./data:/app/data
+    - ./logs:/app/logs
+    - ./reports:/app/reports
+    - ./.env:/app/.env:ro
+    - ./strategies:/app/strategies:ro
     # 知识星球数据目录
-    - ../data/zsxq:/app/data/zsxq
+    - ./data/zsxq:/app/data/zsxq
 
   environment:
     - TZ=Asia/Shanghai
@@ -81,11 +81,11 @@ services:
       # 知识星球同步配置（从 .env 读取，也可以在这里覆盖）
       - ZSXQ_SYNC_INTERVAL=10
     volumes:
-      - ../data:/app/data
-      - ../logs:/app/logs
-      - ../reports:/app/reports
-      - ../.env:/app/.env:ro
-      - ../data/zsxq:/app/data/zsxq
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+      - ./.env:/app/.env:ro
+      - ./data/zsxq:/app/data/zsxq
     deploy:
       resources:
         limits:
