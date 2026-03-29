@@ -49,6 +49,7 @@ COPY patch/ ./patch/
 COPY src/ ./src/
 COPY strategies/ ./strategies/
 COPY --from=web-builder /app/static ./static/
+COPY src/models/zsxq_member.py ./src/models/zsxq_member.py
 
 # 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/reports

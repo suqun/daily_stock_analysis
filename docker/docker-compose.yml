@@ -3,9 +3,16 @@
 # ===================================
 # 
 # 使用方式:
-#   定时模式: docker-compose -f ./docker/docker-compose.yml up -d
-#   FastAPI模式: docker-compose -f ./docker/docker-compose.yml up -d server
-#   同时启动: docker-compose -f ./docker/docker-compose.yml up -d analyzer server
+#   cd /volume1/docker/stock/daily_stock_analysis
+#   docker-compose -f docker/docker-compose.yml up -d --build
+#
+# NAS目录结构:
+#   /volume1/docker/stock/
+#   ├── daily_stock_analysis/  # 代码
+#   ├── data/
+#   ├── logs/
+#   ├── reports/
+#   └── strategies/
 
 name: daily-stock-analysis
 version: '3.8'
@@ -24,45 +31,64 @@ x-common: &common
     - ../data:/app/data
     - ../logs:/app/logs
     - ../reports:/app/reports
-    - ../.env:/app/.env
+    - ../.env:/app/.env:ro
     - ../strategies:/app/strategies:ro
-    # 如需覆盖前端静态资源，可挂载本地 static 目录
-    # - ../static:/app/static:ro
+    # 知识星球数据目录
+    - ../data/zsxq:/app/data/zsxq
 
   environment:
     - TZ=Asia/Shanghai
-
-    # Web/API service bind address (must be 0.0.0.0 inside container)
     - WEBUI_HOST=0.0.0.0
-    # API_PORT 从 .env 文件读取，无需在此硬编码
 
-    # 代理设置（如果需要）
-    # - http_proxy=http://host.docker.internal:10809
-    # - https_proxy=http://host.docker.internal:10809
   logging:
     driver: "json-file"
     options:
       max-size: "10m"
       max-file: "3"
-  # 资源限制
-  deploy:
-    resources:
-      limits:
-        memory: 512M
-      reservations:
-        memory: 256M
 
 services:
-  # 定时任务模式
-  analyzer:
-    <<: *common
-    container_name: stock-analyzer
-
-  # FastAPI 模式
+  # Web服务 + 定时分析
   server:
     <<: *common
     container_name: stock-server
-    command: ["python", "main.py", "--serve-only", "--host", "0.0.0.0", "--port", "${API_PORT:-8000}"]
-    # 若使用 network_mode: host，则以下 ports 映射无效，端口由 command 中的 --port 指定
+    command: ["python", "main.py", "--webui", "--host", "0.0.0.0", "--port", "8080"]
     ports:
-      - "${API_PORT:-8000}:${API_PORT:-8000}"
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      - WEBUI_HOST=0.0.0.0
+      - WEBUI_PORT=8080
+      # 定时任务配置
+      - SCHEDULE_ENABLED=true
+      - SCHEDULE_TIME=18:00
+      - SCHEDULE_RUN_IMMEDIATELY=true
+      - RUN_IMMEDIATELY=true
+      - MARKET_REVIEW_ENABLED=true
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # 知识星球会员同步定时任务
+  zsxq:
+    <<: *common
+    container_name: stock-zsxq
+    command: ["python", "zsxq_scheduler.py"]
+    environment:
+      - TZ=Asia/Shanghai
+      # 知识星球同步配置（从 .env 读取，也可以在这里覆盖）
+      - ZSXQ_SYNC_INTERVAL=10
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../reports:/app/reports
+      - ../.env:/app/.env:ro
+      - ../data/zsxq:/app/data/zsxq
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
