@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-===================================
+==================================
 股票分析命令
-===================================
+==================================
 
 分析指定股票，调用 AI 生成分析报告。
 """
@@ -16,6 +16,8 @@ from bot.models import BotMessage, BotResponse
 from data_provider.base import canonical_stock_code
 
 logger = logging.getLogger(__name__)
+
+from src.services.vip_service import check_free_limit, is_vip as check_is_vip
 
 
 class AnalyzeCommand(BotCommand):
@@ -67,6 +69,15 @@ class AnalyzeCommand(BotCommand):
     
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         """执行分析命令"""
+        qq = message.user_id
+
+        if not check_is_vip(qq):
+            ok, used = check_free_limit(qq)
+            if not ok:
+                return BotResponse(
+                    text="⚠️ 此为会员专属功能\n知识星球搜索：356745\n加入后发送 /bind 星球昵称 即可开通",
+                )
+
         code = canonical_stock_code(args[0])
         
         # 检查是否需要完整报告（默认精简，传 full/完整/详细 切换）

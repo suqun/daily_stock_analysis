@@ -48,6 +48,8 @@
 | **Agent 问股** | **策略对话** | **多轮策略问答，支持均线金叉/缠论/波浪等 11 种内置策略，Web/Bot/API 全链路** |
 | 推送 | 多渠道通知 | 企业微信、飞书、Telegram、Discord、Slack、钉钉、邮件、Pushover |
 | 自动化 | 定时运行 | GitHub Actions 定时执行，无需服务器 |
+| QQ 机器人 | 群聊交互 | 支持 QQ 机器人交互，分析股票、查询行情、VIP 绑定验证 |
+| VIP 会员 | 知识星球同步 | 自动同步知识星球会员数据，支持 /bind 绑定验证 |
 
 > 历史报告详情会优先展示 AI 返回的原始「狙击点位」文本，避免区间价、条件说明等复杂内容在历史回看时被压缩成单个数字。
 
@@ -457,6 +459,93 @@ npm ci
 npm run lint
 npm run build
 ```
+
+## 🚀 部署配置
+
+### 快速启动
+
+```bash
+# 1. 克隆项目
+git clone https://gitee.com/suqun/daily_stock_analysis.git
+cd daily_stock_analysis
+
+# 2. 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. 安装依赖
+pip install -r requirements.txt
+
+# 4. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入配置
+
+# 5. 启动服务
+sh scripts/restart.sh
+```
+
+### 服务管理
+
+| 命令 | 说明 |
+|------|------|
+| `sh scripts/restart.sh` | 重启服务（自动激活 venv） |
+| `sh scripts/restart.sh --serve-only --port 8080` | 指定端口启动 |
+
+### 域名配置（Nginx）
+
+配置 `stock.diplo.top` 指向 `8080` 端口：
+
+```nginx
+server {
+    listen 80;
+    server_name stock.diplo.top;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name stock.diplo.top;
+
+    ssl_certificate /etc/letsencrypt/live/bot.diplo.top/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bot.diplo.top/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+### 知识星球会员同步
+
+1. 配置环境变量：
+```bash
+ZSXQ_PHONE=13800138000          # 知识星球登录手机号
+ZSXQ_PLANET_ID=123456           # 星球ID（浏览器地址栏数字）
+ZSXQ_DATA_DIR=./data/zsxq       # Excel保存目录
+ZSXQ_SYNC_INTERVAL=10           # 同步间隔（分钟）
+```
+
+2. 首次手动下载（需输入验证码）：
+```bash
+python zsxq_downloader.py
+```
+
+3. 启动定时同步：
+```bash
+python zsxq_scheduler.py
+```
+
+### QQ 机器人
+
+配置环境变量：
+```bash
+QQ_BOT_APP_ID=123456789
+QQ_BOT_APP_SECRET=your_secret
+QQ_BOT_TOKEN=your_token
+```
+
+Webhook 路径：`/qq/webhook`
 
 ## 📄 License
 [MIT License](LICENSE) © 2026 ZhuLinsen
