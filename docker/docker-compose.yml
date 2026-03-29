@@ -4,37 +4,38 @@
 # 
 # 使用方式:
 #   cd /volume1/docker/stock
-#   docker-compose -f daily_stock_analysis/docker/docker-compose.yml up -d --build
+#   docker compose -f daily_stock_analysis/docker/docker-compose.yml up -d --build
 #
 # NAS目录结构:
 #   /volume1/docker/stock/
 #   ├── daily_stock_analysis/  # 代码
-#   ├── data/
-#   ├── logs/
-#   ├── reports/
-#   └── strategies/
+#   │   ├── .env              # 环境配置
+#   │   ├── data/             # 数据目录
+#   │   ├── logs/             # 日志目录
+#   │   └── ...
+#   ├── data/                 # 共享数据
+#   ├── logs/                 # 共享日志
+#   └── reports/              # 共享报告
 
 name: daily-stock-analysis
-version: '3.8'
 
 x-common: &common
   build:
-    context: daily_stock_analysis
+    context: ..
     dockerfile: docker/Dockerfile
   restart: unless-stopped
 
-  # 环境变量（从 .env 文件加载）
+  # 环境变量
   env_file:
-    - .env
+    - ../.env
 
   volumes:
-    - ./data:/app/data
-    - ./logs:/app/logs
-    - ./reports:/app/reports
-    - ./.env:/app/.env:ro
-    - ./strategies:/app/strategies:ro
-    # 知识星球数据目录
-    - ./data/zsxq:/app/data/zsxq
+    - ../data:/app/data
+    - ../logs:/app/logs
+    - ../reports:/app/reports
+    - ../.env:/app/.env:ro
+    - ../strategies:/app/strategies:ro
+    - ../data/zsxq:/app/data/zsxq
 
   environment:
     - TZ=Asia/Shanghai
@@ -55,10 +56,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - TZ=Asia/Shanghai
-      - WEBUI_HOST=0.0.0.0
-      - WEBUI_PORT=8080
-      # 定时任务配置
       - SCHEDULE_ENABLED=true
       - SCHEDULE_TIME=18:00
       - SCHEDULE_RUN_IMMEDIATELY=true
@@ -68,8 +65,6 @@ services:
       resources:
         limits:
           memory: 1G
-        reservations:
-          memory: 512M
 
   # 知识星球会员同步定时任务
   zsxq:
@@ -77,18 +72,8 @@ services:
     container_name: stock-zsxq
     command: ["python", "zsxq_scheduler.py"]
     environment:
-      - TZ=Asia/Shanghai
-      # 知识星球同步配置（从 .env 读取，也可以在这里覆盖）
       - ZSXQ_SYNC_INTERVAL=10
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./reports:/app/reports
-      - ./.env:/app/.env:ro
-      - ./data/zsxq:/app/data/zsxq
     deploy:
       resources:
         limits:
           memory: 256M
-        reservations:
-          memory: 128M
