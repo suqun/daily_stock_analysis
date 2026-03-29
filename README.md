@@ -538,14 +538,47 @@ python zsxq_scheduler.py
 
 ### QQ 机器人
 
-配置环境变量：
+#### 1. 安装 OpenClaw
+```bash
+# 安装 Node.js（如果没有）
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 安装 OpenClaw
+sudo npm install -g openclaw-gateway
+```
+
+#### 2. 配置环境变量
 ```bash
 QQ_BOT_APP_ID=123456789
 QQ_BOT_APP_SECRET=your_secret
 QQ_BOT_TOKEN=your_token
 ```
 
-Webhook 路径：`/qq/webhook`
+#### 3. 启动服务
+
+```bash
+# 启动主服务（Web API）
+sh scripts/restart.sh --serve-only --port 8080
+
+# 启动 OpenClaw（QQ 机器人网关）
+sh scripts/start_openclaw.sh
+```
+
+#### 4. Webhook 路径
+- QQ 机器人：`/qq/webhook`
+
+#### 5. 服务管理
+```bash
+# 查看 OpenClaw 日志
+tail -f openclaw.log
+
+# 查看 OpenClaw 进程
+ps aux | grep openclaw
+
+# 重启 OpenClaw
+sh scripts/start_openclaw.sh
+```
 
 ## 📄 License
 [MIT License](LICENSE) © 2026 ZhuLinsen
