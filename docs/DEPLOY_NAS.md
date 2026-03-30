@@ -116,7 +116,114 @@ docker compose -f daily_stock_analysis/docker/docker-compose.yml up -d --build
 |------|--------|------|------|
 | server | stock-server | 8080 | Web API + 定时分析 |
 | zsxq | stock-zsxq | - | 知识星球会员同步 |
-| openclaw | stock-openclaw | 18789 | QQ 机器人 |
+
+---
+
+## 🤖 QQ 机器人部署（NapCat）
+
+由于 OpenClaw 已停止维护，QQ 机器人需要使用 **NapCat** 单独部署。
+
+### 方案一：使用 NapCat Docker（推荐）
+
+#### 1. 拉取 NapCat 镜像
+
+```bash
+# 如果无法直接拉取，需要配置镜像加速或手动导入
+docker pull aoscccc/napcat-docker:latest
+```
+
+#### 2. 创建配置目录
+
+```bash
+mkdir -p /volume1/docker/napcat/{data,logs,config}
+```
+
+#### 3. 创建启动脚本
+
+```bash
+cd /volume1/docker/napcat
+
+cat > start.sh << 'EOF'
+#!/bin/bash
+docker run -d \
+  --name napcat \
+  --restart unless-stopped \
+  -p 18789:18789 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/config:/app/config \
+  -e TZ=Asia/Shanghai \
+  -e QQ=你的QQ号 \
+  -e NAPCAT_MODE=QLOCAL \
+  aoscccc/napcat-docker:latest
+EOF
+
+chmod +x start.sh
+./start.sh
+```
+
+#### 4. 配置 NapCat
+
+1. 浏览器访问：`http://<NAS_IP>:18789`
+2. 扫描二维码登录 QQ
+3. 配置 Webhook：
+   - 启用 Webhook
+   - Webhook 地址：`http://stock-server:8000/qq/webhook`
+   - （如果在同一 docker network 中）
+
+---
+
+### 方案二：手动部署 NapCat
+
+参考官方文档：https://github.com/tencent-connect/NapCat
+
+```bash
+# 1. 下载 NapCat
+cd /volume1/docker/napcat
+wget https://github.com/tencent-connect/NapCat/releases/latest/download/napcat.zip
+unzip napcat.zip
+
+# 2. 配置
+cp config.example.sh config.sh
+nano config.sh  # 修改 QQ 号等配置
+
+# 3. 启动
+./start.sh
+```
+
+---
+
+### 3. 配置 .env 文件
+
+确保 `.env` 中包含以下配置：
+
+```env
+# OpenClaw（旧方式，已废弃）
+# QQ_OPENCLAW_URL=http://127.0.0.1:18789
+# QQ_OPENCLAW_SECRET=xxx
+# QQ_OPENCLAW_TOKEN=xxx
+
+# QQ 机器人官方 API
+QQ_BOT_APP_ID=1903695709
+QQ_BOT_APP_SECRET=你的APP_SECRET
+QQ_BOT_TOKEN=你的BOT_TOKEN
+QQ_ADMIN_QQ=你的QQ号
+```
+
+---
+
+### 4. NapCat 常用命令
+
+```bash
+# 查看日志
+docker logs -f napcat
+
+# 重启
+docker restart napcat
+
+# 停止
+docker stop napcat
+```
 
 ---
 
@@ -140,7 +247,6 @@ docker ps -a
 # 查看日志
 docker logs stock-server        # Web 服务日志
 docker logs stock-zsxq         # 知识星球同步日志
-docker logs stock-openclaw     # QQ 机器人日志
 
 # 实时查看日志
 docker logs -f stock-server
@@ -221,12 +327,6 @@ docker load -i /tmp/nas-images.tar
 1. 检查容器是否运行：`docker ps`
 2. 检查端口是否监听：`netstat -tlnp | grep 8080`
 3. 检查防火墙是否开放
-
-### 5. QQ 机器人无法连接
-
-**问题**：`openclaw: not found`
-
-**解决**：确保使用 `node:22-slim` 镜像，OpenClaw 需要 Node.js 22+。
 
 ---
 
