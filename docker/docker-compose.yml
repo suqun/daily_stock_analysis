@@ -80,11 +80,9 @@ services:
 
   # QQ 机器人 (OpenClaw)
   openclaw:
-    image: node:22-slim
+    image: openclawi/openclaw:latest
     container_name: stock-openclaw
     restart: unless-stopped
-    working_dir: /app
-    command: sh -c "npm install -g openclaw-gateway && npm exec -- openclaw-gateway gateway start"
     ports:
       - "18789:18789"
     environment:
@@ -92,8 +90,8 @@ services:
     env_file:
       - ../.env
     volumes:
-      - ../data:/app/data
-      - ../logs:/app/logs
+      - ../data:/data
+      - ../logs:/logs
     logging:
       driver: "json-file"
       options:
@@ -104,4 +102,4 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
