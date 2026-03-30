@@ -80,7 +80,7 @@ services:
 
   # QQ 机器人 (OpenClaw)
   openclaw:
-    image: openclawi/openclaw:latest
+    image: alpine/openclaw:latest
     container_name: stock-openclaw
     restart: unless-stopped
     ports:
