@@ -150,7 +150,13 @@ def prepare_webui_frontend_assets() -> bool:
         logger.warning("未检测到前端静态资源，且自动构建已关闭")
         return False
 
-    # 检查前端项目
+    force_build = _is_truthy_env("WEBUI_FORCE_BUILD", "false")
+    needs_build, artifact_index = _needs_frontend_build(frontend_dir=frontend_dir, force_build=force_build)
+
+    if not needs_build:
+        logger.info("检测到可直接复用的前端静态产物，跳过运行时自动构建: %s", artifact_index)
+        return True
+
     package_json = frontend_dir / "package.json"
     if not package_json.exists():
         logger.warning("前端项目目录不存在，跳过构建")

@@ -22,6 +22,8 @@ export * from './JsonViewer';
 export * from './YamlViewer';
 export * from './Select';
 export * from './Badge';
+export * from './StatusDot';
+export * from './Tooltip';
 export * from './Pagination';
 export * from './ConfirmDialog';
 export * from '../layout/Shell';
