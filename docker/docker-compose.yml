@@ -78,26 +78,35 @@ services:
         limits:
           memory: 256M
 
-  # QQ 机器人 OpenClaw —— 可用、干净、不折腾
+  # QQ 机器人 OpenClaw —— 适配 Node22-slim + 解决重启循环 + 日志可见
   openclaw:
-    image: node:22-slim
+    image: node:22-slim  # 固定使用node22-slim
     container_name: stock-openclaw
     restart: unless-stopped
     ports:
       - "18789:18789"
     environment:
       - TZ=Asia/Shanghai
+      - NODE_ENV=production
+      # 解决Node22兼容性：禁用实验性警告、兼容旧API
+      - NODE_OPTIONS=--no-experimental-fetch --openssl-legacy-provider
     env_file:
       - ../.env
     volumes:
       - ../data:/data
-      - ../logs:/logs
+      - ../logs:/logs  # 确保宿主机../logs目录存在
     working_dir: /app
+    # 核心修复：1. 安装兼容Node22的依赖 2. 前台运行进程 3. 日志重定向
     command: >
       sh -c "
+      # 更新apt源+安装基础依赖（slim版缺少gcc等编译工具）
+      apt update && apt install -y --no-install-recommends procps &&
+      # 切换国内npm源，加速安装
       npm config set registry https://registry.npmmirror.com &&
-      npm install -g openclaw-gateway &&
-      openclaw
+      # 强制安装适配Node22的forever和openclaw-gateway
+      npm install -g forever openclaw-gateway --force &&
+      # 前台运行openclaw，日志写入挂载目录
+      forever -o /logs/openclaw-out.log -e /logs/openclaw-err.log -f start `which openclaw`
       "
     logging:
       driver: "json-file"
