@@ -84,7 +84,7 @@ services:
     container_name: stock-openclaw
     restart: unless-stopped
     working_dir: /app
-    command: sh -c "npm install -g openclaw-gateway && npx openclaw"
+    command: sh -c "npm install -g openclaw-gateway && node \$(npm root -g)/openclaw/bin/openclaw.js"
     ports:
       - "18789:18789"
     environment:
