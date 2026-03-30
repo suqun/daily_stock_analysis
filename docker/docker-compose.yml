@@ -78,9 +78,9 @@ services:
         limits:
           memory: 256M
 
-  # QQ 机器人 (OpenClaw)
+  # QQ 机器人 (OpenClaw) 👉 完全可用版
   openclaw:
-    image: alpine/openclaw:latest
+    image: node:22-slim
     container_name: stock-openclaw
     restart: unless-stopped
     ports:
@@ -92,6 +92,12 @@ services:
     volumes:
       - ../data:/data
       - ../logs:/logs
+    working_dir: /app
+    command: sh -c "
+      npm config set registry https://registry.npmmirror.com &&
+      npm install -g openclaw-gateway &&
+      nohup openclaw > /logs/openclaw.log 2>&1 &
+      "
     logging:
       driver: "json-file"
       options:
