@@ -80,7 +80,7 @@ services:
 
   # QQ 机器人 (OpenClaw)
   openclaw:
-    image: node:18-slim
+    image: node:22-slim
     container_name: stock-openclaw
     restart: unless-stopped
     working_dir: /app
