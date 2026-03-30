@@ -78,26 +78,16 @@ services:
         limits:
           memory: 256M
 
-  # QQ 机器人 (OpenClaw)
-  openclaw:
-    image: node:22-slim
-    container_name: stock-openclaw
-    restart: unless-stopped
-    working_dir: /app
-    command: sh -c "npm install -g openclaw-gateway@0.5.5 && openclaw"
-    ports:
-      - "18789:18789"
-    environment:
-      - TZ=Asia/Shanghai
-    env_file:
-      - ../.env
-    volumes:
-      - ../data:/app/data
-      - ../logs:/app/logs
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+  # ===========================================
+  # QQ 机器人 - 需要单独部署 NapCat
+  # 详见: https://github.com/tencent-connect/NapCat
+  # ===========================================
+  # 
+  # 由于 OpenClaw 已停止维护，QQ 机器人需要单独部署：
+  #
+  # 方案1: NapCat.Docker (推荐)
+  #   1. 安装 Docker 版 NapCat
+  #   2. 配置 .env 中的 QQ_BOT_* 配置
+  #
+  # 方案2: 手动部署
+  #   在 NAS 上单独部署 NapCat，配置 Webhook 指向 stock-server
