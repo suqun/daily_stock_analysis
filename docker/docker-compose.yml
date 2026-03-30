@@ -78,7 +78,7 @@ services:
         limits:
           memory: 256M
 
-  # QQ 机器人 (OpenClaw) 👉 完全可用版
+  # QQ 机器人 OpenClaw —— 可用、干净、不折腾
   openclaw:
     image: node:22-slim
     container_name: stock-openclaw
@@ -93,10 +93,11 @@ services:
       - ../data:/data
       - ../logs:/logs
     working_dir: /app
-    command: sh -c "
+    command: >
+      sh -c "
       npm config set registry https://registry.npmmirror.com &&
       npm install -g openclaw-gateway &&
-      nohup openclaw > /logs/openclaw.log 2>&1 &
+      openclaw
       "
     logging:
       driver: "json-file"
